@@ -1,9 +1,9 @@
 #include <stdio.h>
-#include <jpeglib.h>
+#include "libjpeg-turbo_private/jpeglib.h"
+#include "libjpeg-turbo_private/jerror.h"
 #include "imageflow_private.h"
 #include "lcms2.h"
 #include "codecs.h"
-#include "jerror.h"
 
 static uint8_t jpeg_bytes_a[] = { 0xFF, 0xD8, 0xFF, 0xDB };
 static uint8_t jpeg_bytes_b[] = { 0xFF, 0xD8, 0xFF, 0xE0 };
@@ -312,9 +312,30 @@ static bool set_downscale_hints(flow_c * c, struct flow_job * job, struct flow_c
     return true;
 }
 
+void  jpeg_idct_downscale_wrap_islow (j_decompress_ptr cinfo, jpeg_component_info * compptr,
+                                      JCOEFPTR coef_block,
+                                      JSAMPARRAY output_buf, JDIMENSION output_col);
+
+static void flow_jpeg_idct_method_selector (j_decompress_ptr cinfo, jpeg_component_info *compptr, jpeg_idct_method * set_idct_method, int * set_idct_category){
+    if (compptr->component_id != 1) return;
+#if JPEG_LIB_VERSION >= 70
+    int scaled = compptr->DCT_h_scaled_size;
+#else
+    int scaled = compptr->DCT_scaled_size;
+#endif
+
+
+    if (scaled == 1 || scaled == 2 || scaled == 4){
+       *set_idct_method = jpeg_idct_downscale_wrap_islow;
+       *set_idct_category = JDCT_ISLOW;
+    }
+}
+
 static bool jpeg_apply_downscaling(flow_c * c, struct flow_job_jpeg_decoder_state * state, int32_t * out_w,
                                    int32_t * out_h)
 {
+
+    jpeg_set_idct_method_selector(state->cinfo, flow_jpeg_idct_method_selector);
     if (state->hints.downscaled_min_width != -1 && state->hints.downscaled_min_height != 1) {
         if (state->cinfo->image_width > state->hints.downscale_if_wider_than
             || state->cinfo->image_height > state->hints.or_if_taller_than) {
