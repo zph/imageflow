@@ -97,6 +97,19 @@ bool scale_down(flow_c * c, flow_job * job, uint8_t * bytes, size_t bytes_count,
 
     return true;
 }
+
+TEST_CASE("Test 8->4 downscaling contrib windows",""){
+    flow_c * c = flow_context_create();
+    struct flow_interpolation_details * details = flow_interpolation_details_create_bicubic_custom(
+        c, 2, 1. / 1.1685777620836932, 0.37821575509399867, 0.31089212245300067);
+
+    struct flow_interpolation_line_contributions * contrib = flow_interpolation_line_contributions_create(c, 4, 8, details);
+
+
+    REQUIRE(contrib->ContribRow[0].Weights[0] == Approx(0.45534f));
+    REQUIRE(contrib->ContribRow[3].Weights[contrib->ContribRow[3].Right - contrib->ContribRow[3].Left -1] == Approx(0.45534f));
+    flow_context_destroy(c);
+}
 TEST_CASE("Test downscale image during decoding", "")
 {
 
@@ -116,6 +129,11 @@ TEST_CASE("Test downscale image during decoding", "")
     if (!scale_down(c, job_b, bytes, bytes_count, 0, 0, 400, 300, &bitmap_b)) {
         ERR(c);
     }
+    // We are using an 'ideal' scaling of the full image as a control
+    // Under srgb decoding (libjpeg-turbo as-is ISLOW downsampling), DSSIM=0.003160
+    // Under linear light decoder box downsampling (vs linear light true resampling), DSSIM=0.002947
+    // Using the flow_bitmap_float scaling in two dierctions, DSSIM=0.000678
+
 
     REQUIRE(visual_compare_two(c, bitmap_a, bitmap_b, "Compare ideal downscaling vs downscaling in decoder", __FILE__,
                                __func__, __LINE__) == true);
