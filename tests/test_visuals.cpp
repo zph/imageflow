@@ -63,16 +63,9 @@ TEST_CASE("Test scale image", "")
     flow_context_destroy(c);
 }
 
-TEST_CASE("Test downscale image during decoding", "")
+bool scale_down(flow_c * c, flow_job * job, uint8_t * bytes, size_t bytes_count, int block_scale_to_x,
+                int block_scale_to_y, int scale_to_x, int scale_to_y, flow_bitmap_bgra ** ref)
 {
-
-    flow_c * c = flow_context_create();
-    size_t bytes_count = 0;
-    uint8_t * bytes = get_bytes_cached(c, &bytes_count, "http://www.rollthepotato.net/~john/kevill/test_800x600.jpg");
-    REQUIRE(djb2_buffer(bytes, bytes_count) == 0x8ff8ec7a8539a2d5); // Test the checksum. I/O can be flaky
-
-    struct flow_job * job = flow_job_create(c);
-    ERR(c);
     int32_t input_placeholder = 0;
     struct flow_io * input = flow_io_create_from_memory(c, flow_io_mode_read_seekable, bytes, bytes_count, job, NULL);
     flow_job_add_io(c, job, input, input_placeholder, FLOW_INPUT);
@@ -84,22 +77,48 @@ TEST_CASE("Test downscale image during decoding", "")
 
     last = flow_node_create_decoder(c, &g, -1, input_placeholder);
 
-    if (!flow_job_decoder_set_downscale_hints_by_placeholder_id(c, job, input_placeholder, 400, 300, 16, 12)) {
-        ERR(c);
+    if (block_scale_to_x > 0) {
+        if (!flow_job_decoder_set_downscale_hints_by_placeholder_id(
+                c, job, input_placeholder, block_scale_to_x, block_scale_to_y, block_scale_to_x, block_scale_to_y)) {
+            ERR(c);
+        }
     }
     struct flow_decoder_info info;
     if (!flow_job_get_decoder_info(c, job, input_placeholder, &info)) {
         ERR(c);
     }
     last = flow_node_create_primitive_crop(c, &g, last, 0, 0, info.frame0_width, info.frame0_height);
-    last = flow_node_create_scale(c, &g, last, 4, 3);
-    last = flow_node_create_bitmap_bgra_reference(c, &g, last, &b);
+    last = flow_node_create_scale(c, &g, last, scale_to_x, scale_to_y);
+    last = flow_node_create_bitmap_bgra_reference(c, &g, last, ref);
     ERR(c);
     if (!flow_job_execute(c, job, &g)) {
         ERR(c);
     }
 
-    REQUIRE(visual_compare(c, b, "DownscaleWithDecoder", store_checksums, __FILE__, __func__, __LINE__) == true);
+    return true;
+}
+TEST_CASE("Test downscale image during decoding", "")
+{
+
+    flow_c * c = flow_context_create();
+    size_t bytes_count = 0;
+    uint8_t * bytes = get_bytes_cached(c, &bytes_count, "http://www.rollthepotato.net/~john/kevill/test_800x600.jpg");
+    REQUIRE(djb2_buffer(bytes, bytes_count) == 0x8ff8ec7a8539a2d5); // Test the checksum. I/O can be flaky
+
+    struct flow_job * job_a = flow_job_create(c);
+    struct flow_job * job_b = flow_job_create(c);
+    struct flow_bitmap_bgra * bitmap_a;
+    struct flow_bitmap_bgra * bitmap_b;
+    ERR(c);
+    if (!scale_down(c, job_a, bytes, bytes_count, 400, 300, 400, 300, &bitmap_a)) {
+        ERR(c);
+    }
+    if (!scale_down(c, job_b, bytes, bytes_count, 0, 0, 400, 300, &bitmap_b)) {
+        ERR(c);
+    }
+
+    REQUIRE(visual_compare_two(c, bitmap_a, bitmap_b, "Compare ideal downscaling vs downscaling in decoder", __FILE__,
+                               __func__, __LINE__) == true);
     ERR(c);
     flow_context_destroy(c);
 }

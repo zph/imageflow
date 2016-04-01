@@ -312,22 +312,23 @@ static bool set_downscale_hints(flow_c * c, struct flow_job * job, struct flow_c
     return true;
 }
 
-void  jpeg_idct_downscale_wrap_islow (j_decompress_ptr cinfo, jpeg_component_info * compptr,
-                                      JCOEFPTR coef_block,
-                                      JSAMPARRAY output_buf, JDIMENSION output_col);
+void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info * compptr, JCOEFPTR coef_block,
+                                    JSAMPARRAY output_buf, JDIMENSION output_col);
 
-static void flow_jpeg_idct_method_selector (j_decompress_ptr cinfo, jpeg_component_info *compptr, jpeg_idct_method * set_idct_method, int * set_idct_category){
-    if (compptr->component_id != 1) return;
+static void flow_jpeg_idct_method_selector(j_decompress_ptr cinfo, jpeg_component_info * compptr,
+                                           jpeg_idct_method * set_idct_method, int * set_idct_category)
+{
+    if (compptr->component_id != 1)
+        return;
 #if JPEG_LIB_VERSION >= 70
     int scaled = compptr->DCT_h_scaled_size;
 #else
     int scaled = compptr->DCT_scaled_size;
 #endif
 
-
-    if (scaled == 1 || scaled == 2 || scaled == 4){
-       *set_idct_method = jpeg_idct_downscale_wrap_islow;
-       *set_idct_category = JDCT_ISLOW;
+    if (scaled == 1 || scaled == 2 || scaled == 4) {
+        *set_idct_method = jpeg_idct_downscale_wrap_islow;
+        *set_idct_category = JDCT_ISLOW;
     }
 }
 

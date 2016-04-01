@@ -351,11 +351,10 @@ TEST_CASE("scale and flip and crop png", "")
     flow_context_destroy(c);
 }
 
-
 TEST_CASE("scale gif", "")
 {
-    flow_context* c = flow_context_create();
-    struct flow_graph* g = flow_graph_create(c, 10, 10, 200, 2.0);
+    flow_context * c = flow_context_create();
+    struct flow_graph * g = flow_graph_create(c, 10, 10, 200, 2.0);
     ERR(c);
 
     int32_t last, input_placeholder = 0, output_placeholder = 1;
@@ -371,19 +370,19 @@ TEST_CASE("scale gif", "")
 
 TEST_CASE("read gif overlapped", "")
 {
-    flow_context* c = flow_context_create();
+    flow_context * c = flow_context_create();
     REQUIRE(c != NULL);
     // Get the input gif
-    struct flow_io* input = get_io_for_cached_url(
+    struct flow_io * input = get_io_for_cached_url(
         c, "http://z.zr.io/rw/pluginexamples/example-animated.gif",
         c); //"http://i.kinja-img.com/gawker-media/image/upload/s--dM0nT5E4--/mn3sov5id06ppjkfb1b2.gif", c);
     ERR(c);
-    struct flow_io* input2 = get_io_for_cached_url(
+    struct flow_io * input2 = get_io_for_cached_url(
         c, "http://z.zr.io/rw/pluginexamples/example-animated.gif",
         c); //"http://i.kinja-img.com/gawker-media/image/upload/s--dM0nT5E4--/mn3sov5id06ppjkfb1b2.gif", c);
     ERR(c);
     // Create the job and add the input
-    struct flow_job* job = flow_job_create(c);
+    struct flow_job * job = flow_job_create(c);
     ERR(c);
     flow_job_add_io(c, job, input, 0, FLOW_INPUT);
     flow_job_add_io(c, job, input2, 1, FLOW_INPUT);
@@ -402,15 +401,15 @@ TEST_CASE("export frames of animated gif", "")
 {
     int32_t last, input_placeholder = 0;
 
-    flow_context* c = flow_context_create();
+    flow_context * c = flow_context_create();
     REQUIRE(c != NULL);
     // Get the input gif
-    struct flow_io* input = get_io_for_cached_url(
+    struct flow_io * input = get_io_for_cached_url(
         c, "http://z.zr.io/rw/pluginexamples/example-animated.gif",
         c); //"http://i.kinja-img.com/gawker-media/image/upload/s--dM0nT5E4--/mn3sov5id06ppjkfb1b2.gif", c);
     ERR(c);
     // Create the job and add the input
-    struct flow_job* job = flow_job_create(c);
+    struct flow_job * job = flow_job_create(c);
     ERR(c);
     flow_job_add_io(c, job, input, input_placeholder, FLOW_INPUT);
     // Now we can read metadata about the input
@@ -422,11 +421,11 @@ TEST_CASE("export frames of animated gif", "")
     REQUIRE(info.frame_count == 68);
     // Loop through each frame, add a corresponding output file, and execute the operation
     for (int i = 0; i < (int64_t)info.frame_count; i++) {
-        struct flow_io* output = flow_io_create_for_output_buffer(c, job);
+        struct flow_io * output = flow_io_create_for_output_buffer(c, job);
         int32_t output_placeholder = input_placeholder + 1 + i;
         flow_job_add_io(c, job, output, output_placeholder, FLOW_OUTPUT);
 
-        struct flow_graph* g = flow_graph_create(c, 10, 10, 200, 2.0);
+        struct flow_graph * g = flow_graph_create(c, 10, 10, 200, 2.0);
         ERR(c);
         last = flow_node_create_decoder(c, &g, -1, input_placeholder);
         last = flow_node_create_encoder(c, &g, last, output_placeholder, flow_codec_type_encode_png);

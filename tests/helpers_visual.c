@@ -236,15 +236,19 @@ static bool generate_image_diff(flow_c * c, char * checksum_a, char * checksum_b
 
     fprintf(stderr, "%s\n", &filename_c[0]);
 
+    char magick_command[4096];
+    flow_snprintf(magick_command, 4096, "dssim %s %s", filename_a, filename_b);
+    int32_t ignore = system(magick_command);
+
     if (access(filename_c, F_OK) != -1) {
         return true; // Already exists!
     }
 
-    char magick_command[4096];
     flow_snprintf(magick_command, 4096, "compare -verbose -metric PSNR %s %s %s", filename_a, filename_b, filename_c);
+    ignore = system(magick_command);
     flow_snprintf(magick_command, 4096, "composite %s %s -compose difference %s", filename_a, filename_b, filename_c);
 
-    int32_t ignore = system(magick_command);
+    ignore = system(magick_command);
     ignore++;
     return true;
 }
@@ -341,6 +345,47 @@ bool visual_compare(flow_c * c, struct flow_bitmap_bgra * bitmap, const char * n
         if (!append_html(c, name, checksum, stored_checksum)) {
             FLOW_error_return(c);
         }
+    }
+
+    return false;
+}
+
+bool visual_compare_two(flow_c * c, struct flow_bitmap_bgra * a, struct flow_bitmap_bgra * b,
+                        const char * comparison_title, const char * file_, const char * func_, int line_number)
+{
+
+    char checksum_a[34];
+
+    char checksum_b[34];
+    // compute checksum of bitmap (two checksums, actually - one for configuration, another for bitmap bytes)
+    if (!checksum_bitmap(c, a, checksum_a, 34)) {
+        FLOW_error(c, flow_status_Invalid_argument);
+        return false;
+    }
+    if (!checksum_bitmap(c, b, checksum_b, 34)) {
+        FLOW_error(c, flow_status_Invalid_argument);
+        return false;
+    }
+
+    // Compare
+    if (strcmp(checksum_a, checksum_b) == 0) {
+        return true; // It matches!
+    }
+    // They differ
+    if (!save_bitmap_to_visuals(c, a, checksum_a)) {
+        FLOW_error_return(c);
+    }
+    if (!save_bitmap_to_visuals(c, b, checksum_b)) {
+        FLOW_error_return(c);
+    }
+    // Diff the two, generate a third PNG. Also get PSNR metrics from imagemagick
+    if (!generate_image_diff(c, checksum_a, checksum_b)) {
+        FLOW_error_return(c);
+    }
+
+    // Dump to HTML=
+    if (!append_html(c, comparison_title, checksum_a, checksum_b)) {
+        FLOW_error_return(c);
     }
 
     return false;
