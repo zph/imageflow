@@ -118,7 +118,6 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_bloc
         FLOW_add_to_callstack(c);
         return false;
     }
-    last = flow_node_create_primitive_crop(c, &g, last, 0, 0, info.frame0_width, info.frame0_height);
     if (scale_to_x != block_scale_to_x || scale_to_y != block_scale_to_y) {
         last = flow_node_create_scale(c, &g, last, scale_to_x, scale_to_y, precise_filter,precise_filter);
     }
