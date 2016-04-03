@@ -81,7 +81,7 @@ bool get_image_dimensions(flow_c *c, uint8_t * bytes, size_t bytes_count, int32_
 }
 
 bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int block_scale_to_x,
-                int block_scale_to_y, int scale_to_x, int scale_to_y, flow_interpolation_filter precise_filter, flow_interpolation_filter block_filter,float sharpen_percent_goal, float blur, flow_bitmap_bgra ** ref)
+                int block_scale_to_y, int scale_to_x, int scale_to_y, flow_interpolation_filter precise_filter, flow_interpolation_filter block_filter,float post_sharpen, float blur, flow_bitmap_bgra ** ref)
 {
     struct flow_job * job = flow_job_create(c);
 
@@ -119,12 +119,14 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int block_scale
         return false;
     }
     last = flow_node_create_primitive_crop(c, &g, last, 0, 0, info.frame0_width, info.frame0_height);
-    last = flow_node_create_scale(c, &g, last, scale_to_x, scale_to_y, precise_filter,precise_filter);
+    if (scale_to_x != block_scale_to_x || scale_to_y != block_scale_to_y) {
+        last = flow_node_create_scale(c, &g, last, scale_to_x, scale_to_y, precise_filter,precise_filter);
+    }
     last = flow_node_create_bitmap_bgra_reference(c, &g, last, ref);
     //SET GLOBAL VARS
     //TODO: kill
     jpeg_block_filter = block_filter;
-    jpeg_sharpen_percent_goal = sharpen_percent_goal;
+    jpeg_sharpen_percent_goal = 0;
     jpeg_block_filter_blur = blur;
     if (flow_context_has_error(c)){
         FLOW_add_to_callstack(c);
@@ -201,34 +203,37 @@ TEST_CASE("Test 8->1 downscaling contrib windows",""){
 }
 
 static const char * const test_images[] = {
+
+    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_6548_0026.jpg",
+    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_6434_0018.jpg",
+    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_5674_0098.jpg",
     "http://s3.amazonaws.com/resizer-images/u6.jpg",
     "https://s3.amazonaws.com/resizer-images/u1.jpg",
     "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/artificial.jpg",
     "http://www.rollthepotato.net/~john/kevill/test_800x600.jpg",
         "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/nightshot_iso_100.jpg",
-    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_6548_0026.jpg",
-    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_6434_0018.jpg",
-    "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_5674_0098.jpg",
 };
 static const char * const test_image_names[] = {
+
+    "vgl_6548_0026.jpg",
+    "vgl_6434_0018.jpg",
+    "vgl_5674_0098.jpg",
     "u6.jpg (from unsplash)",
     "u1.jpg (from unsplash)",
     "artificial.jpg",
     "kevill/test_800x600.jpg",
     "nightshot_iso_100.jpg",
-    "vgl_6548_0026.jpg",
-    "vgl_6434_0018.jpg",
-    "vgl_5674_0098.jpg",
 };
 static const  unsigned long test_image_checksums[] = {
+
+    12408886241370335986UL,
+    4555980965349232399UL,
+    16859055904024046582UL,
     4586057909633522523UL,
     4732395045697209035UL,
     0x4bc30144f62925c1,
     0x8ff8ec7a8539a2d5,
     6083832193877068235L,
-    12408886241370335986UL,
-    4555980965349232399UL,
-    16859055904024046582UL
 
 };
 #define TEST_IMAGE_COUNT (sizeof(test_image_checksums) / sizeof(unsigned long))
@@ -257,6 +262,10 @@ static const  unsigned long test_image_checksums[] = {
 //vgl_6434_0018.jpg             , 0.0045688400, f2 b0.00 s0.00, 0.0004874900, f3 b0.85 s0.00, 0.0002206900, f2 b0.85 s0.00, 0.0002524000, f14 b0.85 s0.00, 0.0002299500, f2 b0.85 s0.00, 0.0002411100, f2 b0.85 s0.00, 0.0002378800, f2 b0.00 s0.00,
 //vgl_5674_0098.jpg             , 0.0258202300, f2 b0.00 s0.00, 0.0017091900, f2 b0.00 s0.00, 0.0009284800, f14 b0.90 s0.00, 0.0008620000, f14 b0.00 s0.00, 0.0005750100, f2 b0.00 s0.00, 0.0004875900, f14 b0.00 s0.00, 0.0003509500, f2 b0.00 s0.00,
 
+//For 5/8 and 6/8 and 7/8 - stick to f2, but search space between blur 0.85 and 1
+//For 2/8, search f2 and f3 between the 0.80 space and the 1.0 space
+//For 1/8 use 2, but try various levels of post-sharpening
+//For 3/8 and 4/8, stick with f2 repeat search space with full logging
 struct downscale_test_result{
     double best_dssim[7];
     flow_interpolation_filter best_filter[7];
@@ -277,8 +286,8 @@ void print_results(struct downscale_test_result * results, const char* const* im
 }
 TEST_CASE("Test downscale image during decoding", "")
 {
-    flow_interpolation_filter filters[] = { flow_interpolation_filter_RobidouxFast, flow_interpolation_filter_Robidoux, flow_interpolation_filter_Mitchell, flow_interpolation_filter_RobidouxSharp};
-    float blurs[] = { 0, 0.8, 0.85, 0.9 };
+    flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux};
+    float blurs[] = {0.75, 0.8, 0.83, 1. / 1.1685777620836932, 0.87, 0.9, 0.93, 0.97, 1.0};
 
 
     struct downscale_test_result results[TEST_IMAGE_COUNT];
@@ -296,7 +305,7 @@ TEST_CASE("Test downscale image during decoding", "")
         REQUIRE(get_image_dimensions(c, bytes, bytes_count, &original_width, &original_height) == true);
 
 
-        for (int scale_to = 7; scale_to > 0; scale_to--) {
+        for (int scale_to = 1; scale_to > 0; scale_to--) {
             long new_w = (original_width * scale_to + 8 - 1L) / 8L;
             long new_h = (original_height * scale_to + 8 - 1L) / 8L;
             fprintf(stdout, "Testing downscaling to %d/8: %dx%d -> %ldx%ld\n", scale_to, original_width,
@@ -305,25 +314,25 @@ TEST_CASE("Test downscale image during decoding", "")
             double best_dssim = 1;
 
             size_t block_filter = 1;
-            for (block_filter = 1; block_filter < sizeof(filters) / sizeof(flow_interpolation_filter); block_filter++) {
+            for (block_filter = 0; block_filter < sizeof(filters) / sizeof(flow_interpolation_filter); block_filter++) {
 
                 for (uint64_t blur = 0; blur < sizeof(blurs) / sizeof(float); blur++) {
 
-                    for (float sharpen_percent_goal = 0; sharpen_percent_goal < 200; sharpen_percent_goal += 50) {
+                    for (float post_sharpen = 0; post_sharpen < 1; post_sharpen += 50) {
                         flow_c * inner_context = flow_context_create();
                         struct flow_bitmap_bgra * bitmap_a;
                         struct flow_bitmap_bgra * bitmap_b;
                         fprintf(stdout, "filter %i - sharpen_goal %.02f - blur %0.5f: ", (int)filters[block_filter],
-                                sharpen_percent_goal, blurs[blur]);
+                                post_sharpen, blurs[blur]);
                         if (!scale_down(inner_context, bytes, bytes_count, 0, 0, new_w, new_h,
                                         flow_interpolation_filter_Robidoux,
-                                        filters[block_filter], sharpen_percent_goal, blurs[blur],
+                                        filters[block_filter], 0, blurs[blur],
                                         &bitmap_b)) {
                             ERR(c);
                         }
                         if (!scale_down(inner_context, bytes, bytes_count, new_w, new_h, new_w, new_h,
                                         flow_interpolation_filter_Robidoux, filters[block_filter],
-                                        sharpen_percent_goal, blurs[blur], &bitmap_a)) {
+                                        post_sharpen, blurs[blur], &bitmap_a)) {
                             ERR(c);
                         }
                         double dssim;
@@ -337,7 +346,7 @@ TEST_CASE("Test downscale image during decoding", "")
                             best_dssim = dssim;
                             results[test_image_index].best_filter[scale_to -1] = filters[block_filter];
                             results[test_image_index].best_blur [scale_to -1] = blurs[blur];
-                            results[test_image_index].best_sharpen[scale_to -1] = sharpen_percent_goal;
+                            results[test_image_index].best_sharpen[scale_to -1] = post_sharpen;
                         }
 
                         ERR(inner_context);
