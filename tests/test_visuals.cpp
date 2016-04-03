@@ -361,28 +361,24 @@ struct config_result{
     const char * names[TEST_IMAGE_COUNT];
 };
 
-
-
-
-
+// Testing blurring for the first time
+//Least bad configuration (2) for 3/8: (worst dssim 0.0041007100, rank 0.795) - f2 blur=0.86 sharp=-2.00
 //
-//void print_results(struct downscale_test_result * results, const char* const* image_names, size_t result_count){
-//    fprintf(stdout, "%-30s, 1/8 - DSSIM, 1/8 - Params,  2/8 - DSSIM, 2/8 - Params, 3/8 - DSSIM, 3/8 - Params, 4/8 - DSSIM, 4/8 - Params, 5/8 - DSSIM, 5/8 - Params, 6/8 - DSSIM, 6/8 - Params, 7/8 - DSSIM, 7/8 - Params,\n", "image used");
-//    for (size_t ix = 0; ix < result_count; ix++){
-//        fprintf(stdout, "%-30s, ", image_names[ix]);
-//        for (int scale = 0; scale < 7; scale++) {
-//            fprintf(stdout, "%.010f, f%d b%0.2f s%0.2f, ", results[ix].best_dssim[scale], results[ix].best_filter[scale],
-//                    results[ix].best_blur[scale], results[ix].best_sharpen[scale]);
-//        }
-//        fprintf(stdout, "\n");
-//    }
-//}
+//
+//Configuration            , vgl_6548_0026.jpg, vgl_6434_0018.jpg, vgl_5674_0098.jpg, u6.jpg (from unsplash), u1.jpg (from unsplash), artificial.jpg, kevill/test_800x600.jpg, nightshot_iso_100.jpg,
+//f2 blur=0.86 sharp=0.00, 0.0009735000000000000, 0.0002212100000000000, 0.0009313300000000000, 0.0041063200000000001, 0.0031388100000000001, 0.0001205000000000000, 0.0007792900000000000, 0.0002229100000000000,
+//f2 blur=0.86 sharp=-3.00, 0.0009771700000000001, 0.0002168100000000000, 0.0009347900000000000, 0.0040963500000000003, 0.0031265300000000002, 0.0001211600000000000, 0.0007812200000000000, 0.0002235200000000000,
+//f2 blur=0.86 sharp=-2.00, 0.0009749200000000000, 0.0002180800000000000, 0.0009340800000000000, 0.0041007099999999996, 0.0031302100000000000, 0.0001205200000000000, 0.0007800100000000000, 0.0002230100000000000,
+//f2 blur=0.86 sharp=-1.00, 0.0009756000000000000, 0.0002193200000000000, 0.0009326600000000000, 0.0041058700000000002, 0.0031356299999999999, 0.0001204800000000000, 0.0007791600000000000, 0.0002229800000000000,
+//
+
+
 TEST_CASE("Test downscale image during decoding", "")
 {
-    flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux };
-    float blurs[] = { 1. / 1.1685777620836932, 0.6, 0.7, 0.75, 0.8, 0.83, 0.87, 0.9, 0.93, 0.97, 1.0 };
-    float sharpens[] = { 0, -1, -3, -5, -9, -15,  0.5, -0.5, 1, 3, 5,  9,  15, 25, 30, 50};
-    int target_sizes[] = {1,  2, 3, 4, 5, 6, 7 };
+    flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux};
+    float blurs[] = { 1. / 1.1685777620836932};
+    float sharpens[] = { 0, -3, -2, -1};
+    int target_sizes[] = {3, 4, 5, 6, 7, 2, 1 };
 #define target_sizes_count (sizeof(target_sizes) / sizeof(int))
 #define sharpens_count (sizeof(sharpens) / sizeof(float))
 #define blurs_count (sizeof(blurs) / sizeof(float))
