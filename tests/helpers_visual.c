@@ -201,7 +201,7 @@ static bool download_by_checksum(flow_c * c, struct flow_bitmap_bgra * bitmap, c
     return true;
 }
 
-static bool save_bitmap_to_visuals(flow_c * c, struct flow_bitmap_bgra * bitmap, char * checksum)
+static bool save_bitmap_to_visuals(flow_c * c, struct flow_bitmap_bgra * bitmap, char * checksum, char * name)
 {
     char filename[2048];
     if (!create_relative_path(c, true, filename, 2048, "/visuals/%s.png", checksum)) {
@@ -216,7 +216,7 @@ static bool save_bitmap_to_visuals(flow_c * c, struct flow_bitmap_bgra * bitmap,
         FLOW_add_to_callstack(c);
         return false;
     }
-    fprintf(stderr, "%s (current)\n", &filename[0]);
+    fprintf(stderr, "%s (%s)\n", &filename[0], name);
     return true;
 }
 
@@ -246,7 +246,7 @@ static double get_dssim_from_command(flow_c * c, const char * command)
     int exit_code = pclose(fd);
     /* We can now work with the output as we please. Just print
      * out to confirm output is as expected */
-    fwrite(comout, 1, comlen, stdout);
+    //fwrite(comout, 1, comlen, stdout);
     double result = 125;
     if (exit_code == 0) {
         result = strtold(comout, NULL);
@@ -276,9 +276,9 @@ static bool diff_images(flow_c * c, char * checksum_a, char * checksum_b, double
     }
 
     char magick_command[4096];
-    flow_snprintf(magick_command, 4096, "dssim %s %s", filename_a, filename_b);
+    flow_snprintf(magick_command, 4096, "dssim %s %s", filename_b, filename_a);
     *out_dssim = get_dssim_from_command(c, magick_command);
-    if (*out_dssim > 1 || *out_dssim < 0) {
+    if (*out_dssim > 10 || *out_dssim < 0) {
         FLOW_error(c, flow_status_IO_error);
         return false;
     };
@@ -372,7 +372,7 @@ bool visual_compare(flow_c * c, struct flow_bitmap_bgra * bitmap, const char * n
 
     // The hash differs
     // Save ours so we can see it
-    if (!save_bitmap_to_visuals(c, bitmap, checksum)) {
+    if (!save_bitmap_to_visuals(c, bitmap, checksum, "current")) {
         FLOW_error_return(c);
     }
 
@@ -427,10 +427,10 @@ bool visual_compare_two(flow_c * c, struct flow_bitmap_bgra * a, struct flow_bit
     }
     if (save_bitmaps) {
         // They differ
-        if (!save_bitmap_to_visuals(c, a, checksum_a)) {
+        if (!save_bitmap_to_visuals(c, a, checksum_a, "A")) {
             FLOW_error_return(c);
         }
-        if (!save_bitmap_to_visuals(c, b, checksum_b)) {
+        if (!save_bitmap_to_visuals(c, b, checksum_b, "B")) {
             FLOW_error_return(c);
         }
         // Diff the two, generate a third PNG. Also get PSNR metrics from imagemagick

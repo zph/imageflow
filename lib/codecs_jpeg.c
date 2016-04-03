@@ -336,8 +336,7 @@ static void flow_jpeg_idct_method_selector(j_decompress_ptr cinfo, jpeg_componen
         *set_idct_method = jpeg_idct_downscale_wrap_islow;
         *set_idct_category = JDCT_ISLOW;
 
-        fprintf(stdout, "IDCT custom downscaling to %d/8 with filter %d, sharpen %.03f, blur %.05f \n", scaled,
-                jpeg_block_filter, jpeg_sharpen_percent_goal, jpeg_block_filter_blur);
+        fprintf(stdout, "IDCT downscaling to %d/8.", scaled);
     }
 }
 

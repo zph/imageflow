@@ -80,8 +80,8 @@ bool get_image_dimensions(flow_c *c, uint8_t * bytes, size_t bytes_count, int32_
     return true;
 }
 
-bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int block_scale_to_x,
-                int block_scale_to_y, int scale_to_x, int scale_to_y, flow_interpolation_filter precise_filter, flow_interpolation_filter block_filter,float post_sharpen, float blur, flow_bitmap_bgra ** ref)
+bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_block_size, int block_scale_to_x,
+                int block_scale_to_y, int scale_to_x, int scale_to_y, flow_interpolation_filter precise_filter, flow_interpolation_filter block_filter, float post_sharpen, float blur, flow_bitmap_bgra ** ref)
 {
     struct flow_job * job = flow_job_create(c);
 
@@ -143,6 +143,11 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int block_scale
         return false;
     }
 
+
+    if (!flow_bitmap_bgra_sharpen_block_edges(c, *ref, target_block_size, post_sharpen)){
+        FLOW_add_to_callstack(c);
+        return false;
+    }
     if (!flow_job_destroy(c, job)) {
         FLOW_add_to_callstack(c);
         return false;
@@ -266,46 +271,74 @@ static const  unsigned long test_image_checksums[] = {
 //For 2/8, search f2 and f3 between the 0.80 space and the 1.0 space
 //For 1/8 use 2, but try various levels of post-sharpening
 //For 3/8 and 4/8, stick with f2 repeat search space with full logging
-struct downscale_test_result{
-    double best_dssim[7];
-    flow_interpolation_filter best_filter[7];
-    float best_sharpen[7];
-    float best_blur[7];
+//struct downscale_test_result{
+//    double best_dssim[7];
+//    flow_interpolation_filter best_filter[7];
+//    float best_sharpen[7];
+//    float best_blur[7];
+//};
+
+struct config_result{
+    float blur;
+    float sharpen;
+    flow_interpolation_filter filter;
+    double dssim[TEST_IMAGE_COUNT];
+    const char * names[TEST_IMAGE_COUNT];
 };
 
-void print_results(struct downscale_test_result * results, const char* const* image_names, size_t result_count){
-    fprintf(stdout, "%-30s, 1/8 - DSSIM, 1/8 - Params,  2/8 - DSSIM, 2/8 - Params, 3/8 - DSSIM, 3/8 - Params, 4/8 - DSSIM, 4/8 - Params, 5/8 - DSSIM, 5/8 - Params, 6/8 - DSSIM, 6/8 - Params, 7/8 - DSSIM, 7/8 - Params,\n", "image used");
-    for (size_t ix = 0; ix < result_count; ix++){
-        fprintf(stdout, "%-30s, ", image_names[ix]);
-        for (int scale = 0; scale < 7; scale++) {
-            fprintf(stdout, "%.010f, f%d b%0.2f s%0.2f, ", results[ix].best_dssim[scale], results[ix].best_filter[scale],
-                    results[ix].best_blur[scale], results[ix].best_sharpen[scale]);
-        }
-        fprintf(stdout, "\n");
-    }
-}
+
+
+
+
+//
+//void print_results(struct downscale_test_result * results, const char* const* image_names, size_t result_count){
+//    fprintf(stdout, "%-30s, 1/8 - DSSIM, 1/8 - Params,  2/8 - DSSIM, 2/8 - Params, 3/8 - DSSIM, 3/8 - Params, 4/8 - DSSIM, 4/8 - Params, 5/8 - DSSIM, 5/8 - Params, 6/8 - DSSIM, 6/8 - Params, 7/8 - DSSIM, 7/8 - Params,\n", "image used");
+//    for (size_t ix = 0; ix < result_count; ix++){
+//        fprintf(stdout, "%-30s, ", image_names[ix]);
+//        for (int scale = 0; scale < 7; scale++) {
+//            fprintf(stdout, "%.010f, f%d b%0.2f s%0.2f, ", results[ix].best_dssim[scale], results[ix].best_filter[scale],
+//                    results[ix].best_blur[scale], results[ix].best_sharpen[scale]);
+//        }
+//        fprintf(stdout, "\n");
+//    }
+//}
 TEST_CASE("Test downscale image during decoding", "")
 {
-    flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux};
-    float blurs[] = {0.75, 0.8, 0.83, 1. / 1.1685777620836932, 0.87, 0.9, 0.93, 0.97, 1.0};
+    flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux };
+    float blurs[] = { 1. / 1.1685777620836932, 0.6, 0.7, 0.75, 0.8, 0.83, 0.87, 0.9, 0.93, 0.97, 1.0 };
+    float sharpens[] = { 0, -1, -3, -5, -9, -15,  0.5, -0.5, 1, 3, 5,  9,  15, 25, 30, 50};
+    int target_sizes[] = {1,  2, 3, 4, 5, 6, 7 };
+#define target_sizes_count (sizeof(target_sizes) / sizeof(int))
+#define sharpens_count (sizeof(sharpens) / sizeof(float))
+#define blurs_count (sizeof(blurs) / sizeof(float))
+#define filters_count (sizeof(filters) / sizeof(flow_interpolation_filter))
 
+    for (size_t target_size_ix = 0; target_size_ix < target_sizes_count; target_size_ix++) {
+        int scale_to = target_sizes[target_size_ix];
 
-    struct downscale_test_result results[TEST_IMAGE_COUNT];
-    memset(&results[0], 0, sizeof(results));
-    for (size_t test_image_index =0; test_image_index < TEST_IMAGE_COUNT; test_image_index++) {
+        fprintf(stdout, "Searching for best candidate for %d/8 filter\n", scale_to);
+        struct config_result config_results[sharpens_count * blurs_count * filters_count];
+#define config_result_count (sizeof(config_results) / sizeof(struct config_result))
 
-        fprintf(stdout, "Testing with %s\n\n", test_images[test_image_index]);
-        flow_c * c = flow_context_create();
-        size_t bytes_count = 0;
-        uint8_t * bytes = get_bytes_cached(c, &bytes_count,
-                                           test_images[test_image_index]);
-        unsigned long input_checksum = djb2_buffer(bytes, bytes_count);
-        REQUIRE(input_checksum == test_image_checksums[test_image_index]); // Test the checksum. I/O can be flaky
-        int original_width, original_height;
-        REQUIRE(get_image_dimensions(c, bytes, bytes_count, &original_width, &original_height) == true);
+        double worst_dssims[TEST_IMAGE_COUNT];
+        memset(&worst_dssims[0], 0, sizeof(worst_dssims));
+        double best_dssims[TEST_IMAGE_COUNT];
+        memset(&best_dssims[0], 0, sizeof(best_dssims));
+        memset(&config_results[0], 0, sizeof(config_results));
 
+        for (size_t test_image_index = 0; test_image_index < TEST_IMAGE_COUNT; test_image_index++) {
 
-        for (int scale_to = 1; scale_to > 0; scale_to--) {
+            int config_index = 0;
+            fprintf(stdout, "Testing with %s\n\n", test_images[test_image_index]);
+            flow_c * c = flow_context_create();
+            size_t bytes_count = 0;
+            uint8_t * bytes = get_bytes_cached(c, &bytes_count,
+                                               test_images[test_image_index]);
+            unsigned long input_checksum = djb2_buffer(bytes, bytes_count);
+            REQUIRE(input_checksum == test_image_checksums[test_image_index]); // Test the checksum. I/O can be flaky
+            int original_width, original_height;
+            REQUIRE(get_image_dimensions(c, bytes, bytes_count, &original_width, &original_height) == true);
+
             long new_w = (original_width * scale_to + 8 - 1L) / 8L;
             long new_h = (original_height * scale_to + 8 - 1L) / 8L;
             fprintf(stdout, "Testing downscaling to %d/8: %dx%d -> %ldx%ld\n", scale_to, original_width,
@@ -313,59 +346,95 @@ TEST_CASE("Test downscale image during decoding", "")
 
             double best_dssim = 1;
 
-            size_t block_filter = 1;
-            for (block_filter = 0; block_filter < sizeof(filters) / sizeof(flow_interpolation_filter); block_filter++) {
 
-                for (uint64_t blur = 0; blur < sizeof(blurs) / sizeof(float); blur++) {
+            struct flow_bitmap_bgra * reference_bitmap;
+            if (!scale_down(c, bytes, bytes_count,scale_to,  0, 0, new_w, new_h,
+                            flow_interpolation_filter_Robidoux,
+                            flow_interpolation_filter_Robidoux, 0, 0,
+                            &reference_bitmap)) {
+                ERR(c);
+            }
 
-                    for (float post_sharpen = 0; post_sharpen < 1; post_sharpen += 50) {
+            size_t filter_ix = 1;
+            for (size_t filter_ix = 0; filter_ix < filters_count; filter_ix++) {
+                for (size_t blur_ix = 0; blur_ix < blurs_count; blur_ix++) {
+                    for (size_t sharpen_ix = 0; sharpen_ix < sharpens_count; sharpen_ix++) {
+                        struct config_result * config =  &config_results[config_index];
+                        config->blur = blurs[blur_ix];
+                        config->sharpen = sharpens[sharpen_ix];
+                        config->filter = filters[filter_ix];
+
                         flow_c * inner_context = flow_context_create();
-                        struct flow_bitmap_bgra * bitmap_a;
-                        struct flow_bitmap_bgra * bitmap_b;
-                        fprintf(stdout, "filter %i - sharpen_goal %.02f - blur %0.5f: ", (int)filters[block_filter],
-                                post_sharpen, blurs[blur]);
-                        if (!scale_down(inner_context, bytes, bytes_count, 0, 0, new_w, new_h,
-                                        flow_interpolation_filter_Robidoux,
-                                        filters[block_filter], 0, blurs[blur],
-                                        &bitmap_b)) {
-                            ERR(c);
-                        }
-                        if (!scale_down(inner_context, bytes, bytes_count, new_w, new_h, new_w, new_h,
-                                        flow_interpolation_filter_Robidoux, filters[block_filter],
-                                        post_sharpen, blurs[blur], &bitmap_a)) {
+                        struct flow_bitmap_bgra * experiment_bitmap;
+                        fprintf(stdout, "f%i sharp %.04f blur %0.4f: ", (int)config->filter,
+                                config->sharpen / 100.f, config->blur);
+
+                        if (!scale_down(inner_context, bytes, bytes_count, scale_to, new_w, new_h, new_w, new_h,
+                                        flow_interpolation_filter_Robidoux, config->filter,
+                                        config->sharpen, config->blur, &experiment_bitmap)) {
                             ERR(c);
                         }
                         double dssim;
-                        visual_compare_two(inner_context, bitmap_a, bitmap_b,
+                        visual_compare_two(inner_context, reference_bitmap, experiment_bitmap,
                                            "Compare ideal downscaling vs downscaling in decoder", &dssim, true, false,
                                            __FILE__,
                                            __func__, __LINE__);
-                        if (dssim < best_dssim) {
 
-                            results[test_image_index].best_dssim[scale_to -1] = dssim;
-                            best_dssim = dssim;
-                            results[test_image_index].best_filter[scale_to -1] = filters[block_filter];
-                            results[test_image_index].best_blur [scale_to -1] = blurs[blur];
-                            results[test_image_index].best_sharpen[scale_to -1] = post_sharpen;
+                        fprintf(stdout, " DSSIM=%.010f\n", dssim);
+
+
+                        if (dssim > worst_dssims[test_image_index])  worst_dssims[test_image_index] = dssim;
+
+                        if (best_dssims[test_image_index] == 0 || best_dssims[test_image_index] > dssim){
+                            best_dssims[test_image_index] = dssim;
                         }
+                        config->dssim[test_image_index] = dssim;
+                        config->names[test_image_index] = test_image_names[test_image_index];
 
                         ERR(inner_context);
-                        flow_bitmap_bgra_destroy(inner_context, bitmap_a);
-                        flow_bitmap_bgra_destroy(inner_context, bitmap_b);
+                        flow_bitmap_bgra_destroy(inner_context, experiment_bitmap);
                         flow_context_destroy(inner_context);
                         inner_context = NULL;
                     }
                 }
             }
 
-            print_results(results, test_image_names, test_image_index + 1);
-            fflush(stdout);
+            flow_context_destroy(c);
         }
 
-        flow_context_destroy(c);
-    }
+        size_t peak_ix, least_bad_ix = 0;
+        double peak_for_target = 1, least_bad_for_target =1;
+        double least_bad_relative = 2;
+        for (size_t config_ix = 0; config_ix < config_result_count; config_ix++){
+            double min_rel = 1;
+            double max_rel = 0;
+            double min = 1;
+            double max =0;
+            for (size_t i =0; i < TEST_IMAGE_COUNT; i++){
+                double dssim = config_results[config_ix].dssim[i];
 
-    print_results(results, test_image_names, TEST_IMAGE_COUNT);
+                double dssim_relative = (dssim - best_dssims[i]) / (worst_dssims[i] - best_dssims[i]);
+                if (dssim_relative < min_rel) min_rel = dssim_relative;
+                if (dssim_relative > max_rel) max_rel = dssim_relative;
+                if (dssim < min) min = dssim;
+                if (dssim > max) max = dssim;
+            }
+            if (least_bad_relative > max_rel){
+                least_bad_relative = max_rel;
+                least_bad_for_target = max;
+                least_bad_ix = config_ix;
+            }
+            if (peak_ix > min){
+                peak_ix = min;
+                peak_ix = config_ix;
+            }
+        }
+        struct config_result least_bad = config_results[least_bad_ix];
+        fprintf(stdout, "\n\n\nLeast bad configuration (%d) for %d/8: (worst dssim %.010f, rank %.03f) - f%d blur=%.2f sharp=%.2f \n\n\n", (int)least_bad_ix, scale_to, least_bad_for_target, least_bad_relative, least_bad.filter, least_bad.blur, least_bad.sharpen);
+
+
+        fflush(stdout);
+    }
 
     fprintf(stdout, "\n\n...done\n");
     sleep(1);
