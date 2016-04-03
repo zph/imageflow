@@ -446,9 +446,9 @@ bool flow_bitmap_float_approx_gaussian_blur_rows(flow_c * context, struct flow_b
 
 static void flow_bitmap_bgra_sharpen_block_edges_x(struct flow_bitmap_bgra * im, int block_size, float pct)
 {
-    pct = pct / 100.0;
-    if (pct < -1) pct = -1;
-    if (pct > 1.0) pct = 1;
+    pct = pct / 100.0f;
+    if (pct < -1.0f) pct = -1;
+    if (pct > 1.0f) pct = 1;
     const float n = (float)(-pct / (pct - 1.0)); //if 0 < pct < 1
     //indexes used are coord % block_size
     float c_l[7]; //left coefficient
@@ -472,7 +472,7 @@ static void flow_bitmap_bgra_sharpen_block_edges_x(struct flow_bitmap_bgra * im,
     const uint32_t sy = im->h;
     const uint32_t stride = im->stride;
     const uint32_t bytes_pp = flow_pixel_format_bytes_per_pixel (im->fmt);
-    if (pct <= 0 || im->w < 3 || bytes_pp < 3) return;
+    if (im->w < 3 || bytes_pp < 3) return;
     for (y = 0; y < sy; y++)
     {
         unsigned char *row = im->pixels + y * stride;
@@ -512,7 +512,7 @@ bool flow_bitmap_bgra_transpose(flow_c * c, struct flow_bitmap_bgra * from, stru
 }
 bool flow_bitmap_bgra_sharpen_block_edges(flow_c * c, struct flow_bitmap_bgra * im, int block_size, float pct)
 {
-    if (pct == 0) return true;
+    if (pct == 0.0f) return true;
     flow_bitmap_bgra_sharpen_block_edges_x(im, block_size, pct);
     struct flow_bitmap_bgra * temp = flow_bitmap_bgra_create(c, im->h, im->w, false, im->fmt);
     if (temp == NULL){
