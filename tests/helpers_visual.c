@@ -279,8 +279,10 @@ static bool diff_images(flow_c * c, char * checksum_a, char * checksum_b, double
     flow_snprintf(magick_command, 4096, "dssim %s %s", filename_b, filename_a);
     *out_dssim = get_dssim_from_command(c, magick_command);
     if (*out_dssim > 10 || *out_dssim < 0) {
-        FLOW_error(c, flow_status_IO_error);
-        return false;
+        fprintf(stderr, "Failed to execute: %s", magick_command);
+        *out_dssim = 2.23456;
+        //FLOW_error(c, flow_status_IO_error);
+
     };
     if (generate_visual_diff) {
         fprintf(stderr, "%s\n", &filename_c[0]);
