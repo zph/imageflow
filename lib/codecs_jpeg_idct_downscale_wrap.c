@@ -40,6 +40,21 @@ static inline float fast_srgb_to_linear(uint8_t s)
     return r;
 }
 
+FLOW_EXPORT flow_interpolation_filter jpeg_block_filter;
+
+FLOW_EXPORT float jpeg_sharpen_percent_goal;
+
+FLOW_EXPORT float jpeg_block_filter_blur;
+
+static void zero_output(int target_size, JSAMPARRAY output_buf, JDIMENSION output_col){
+    for (int ctr = 0; ctr < target_size; ctr++) {
+        JSAMPROW outptr = output_buf[ctr] + output_col;
+        for (int ctr_x = 0; ctr_x < target_size; ctr_x++) {
+            outptr[ctr_x] = 0;
+        }
+    }
+}
+
 void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info * compptr, JCOEFPTR coef_block,
                                     JSAMPARRAY output_buf, JDIMENSION output_col)
 {
@@ -47,14 +62,13 @@ void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info 
     JSAMPLE intermediate[DCTSIZE2];
     JSAMPROW rows[DCTSIZE];
     JSAMPROW outptr;
-    //JSAMPLE * range_limit = cinfo->sample_range_limit;
+    // JSAMPLE * range_limit = cinfo->sample_range_limit;
     int i, ctr, ctr_x;
 
     for (i = 0; i < DCTSIZE; i++)
         rows[i] = &intermediate[i * DCTSIZE];
 
     jpeg_idct_islow(cinfo, compptr, coef_block, &rows[0], 0);
-
 
 #if JPEG_LIB_VERSION >= 70
     int scaled = compptr->DCT_h_scaled_size;
@@ -64,55 +78,67 @@ void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info 
 
     flow_c * c = flow_context_create();
 
-    struct flow_interpolation_details * details = flow_interpolation_details_create_bicubic_custom(
-        c, 2, 1. / 1.1685777620836932, 0.37821575509399867, 0.31089212245300067);
+    struct flow_interpolation_details * details = flow_interpolation_details_create_from(c, jpeg_block_filter);
 
-    struct flow_interpolation_line_contributions * contrib = flow_interpolation_line_contributions_create(c, scaled, DCTSIZE, details);
+    details->sharpen_percent_goal = jpeg_sharpen_percent_goal;
+    if (jpeg_block_filter_blur > 0) {
+        details->blur = jpeg_block_filter_blur;
+    }
+    //    struct flow_interpolation_details * details = flow_interpolation_details_create_bicubic_custom(
+    //        c, 2, 1. / 1.1685777620836932, 0.37821575509399867, 0.31089212245300067);
+
+    struct flow_interpolation_line_contributions * contrib
+        = flow_interpolation_line_contributions_create(c, scaled, DCTSIZE, details);
     if (contrib == NULL) {
         FLOW_add_to_callstack(c);
-        exit(99);
+        //flow_context_print_error_to(c, stderr);
+        flow_context_destroy(c);
+        zero_output(scaled, output_buf, output_col);
+        return; //Let's skip this for now - better to see poor DSSIM
     }
 
     struct flow_bitmap_float * source_buf = flow_bitmap_float_create(c, DCTSIZE, DCTSIZE, flow_gray8, false);
 
     // TODO: use LUT
     for (i = 0; i < DCTSIZE2 && i < (int)source_buf->float_count; i++)
-        source_buf->pixels[i] =Context_srgb_to_floatspace(c, intermediate[i]);
-            //srgb_to_linear((float)intermediate[i] / 255.0f);
-
+        source_buf->pixels[i] = Context_srgb_to_floatspace(c, intermediate[i]);
+    // srgb_to_linear((float)intermediate[i] / 255.0f);
 
     struct flow_bitmap_float * dest_buf = flow_bitmap_float_create(c, scaled, DCTSIZE, flow_gray8, false);
 
     if (!flow_bitmap_float_scale_rows(c, source_buf, 0, dest_buf, 0, DCTSIZE, contrib->ContribRow)) {
+        FLOW_add_to_callstack(c);
+        flow_context_print_error_to(c, stderr);
         exit(99);
     }
 
     struct flow_bitmap_float * transposed_buf = flow_bitmap_float_create(c, DCTSIZE, scaled, flow_gray8, false);
 
-    for (int y =0; y < DCTSIZE; y++){
-        for (int x = 0; x < scaled; x++){
-            transposed_buf->pixels[transposed_buf->float_stride * x + y] = dest_buf->pixels[x + y * dest_buf->float_stride];
+    for (int y = 0; y < DCTSIZE; y++) {
+        for (int x = 0; x < scaled; x++) {
+            transposed_buf->pixels[transposed_buf->float_stride * x + y]
+                = dest_buf->pixels[x + y * dest_buf->float_stride];
         }
     }
-
 
     struct flow_bitmap_float * final_buf = flow_bitmap_float_create(c, scaled, scaled, flow_gray8, false);
 
     if (!flow_bitmap_float_scale_rows(c, transposed_buf, 0, final_buf, 0, scaled, contrib->ContribRow)) {
+        FLOW_add_to_callstack(c);
+        flow_context_print_error_to(c, stderr);
         exit(99);
     }
 
-    //int input_pixels_window =  8 / scaled;
+    // int input_pixels_window =  8 / scaled;
     int target_size = scaled;
     for (ctr = 0; ctr < target_size; ctr++) {
         outptr = output_buf[ctr] + output_col;
         for (ctr_x = 0; ctr_x < target_size; ctr_x++) {
 
-            float pixel =final_buf->pixels[ctr_x * final_buf->float_stride + ctr];
+            float pixel = final_buf->pixels[ctr_x * final_buf->float_stride + ctr];
             outptr[ctr_x] = Context_floatspace_to_srgb(c, pixel);
         }
     }
-
 
     flow_context_destroy(c);
 }

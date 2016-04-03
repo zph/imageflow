@@ -208,6 +208,10 @@ static bool save_bitmap_to_visuals(flow_c * c, struct flow_bitmap_bgra * bitmap,
         FLOW_add_to_callstack(c);
         return false;
     }
+    if (access(filename, F_OK) != -1) {
+        return true; // Already exists!
+    }
+
     if (!write_frame_to_disk(c, &filename[0], bitmap)) {
         FLOW_add_to_callstack(c);
         return false;
@@ -216,7 +220,44 @@ static bool save_bitmap_to_visuals(flow_c * c, struct flow_bitmap_bgra * bitmap,
     return true;
 }
 
-static bool generate_image_diff(flow_c * c, char * checksum_a, char * checksum_b)
+static double get_dssim_from_command(flow_c * c, const char * command)
+{
+    FILE * fd;
+    fd = popen(command, "r");
+    if (!fd)
+        return 200;
+
+    char buffer[256];
+    size_t chread;
+    /* String to store entire command contents in */
+    size_t comalloc = 256;
+    size_t comlen = 0;
+    char * comout = (char *)FLOW_malloc(c, comalloc);
+
+    /* Use fread so binary data is dealt with correctly */
+    while ((chread = fread(buffer, 1, sizeof(buffer), fd)) != 0) {
+        if (comlen + chread >= comalloc) {
+            comalloc *= 2;
+            comout = (char *)FLOW_realloc(c, comout, comalloc);
+        }
+        memmove(comout + comlen, buffer, chread);
+        comlen += chread;
+    }
+    int exit_code = pclose(fd);
+    /* We can now work with the output as we please. Just print
+     * out to confirm output is as expected */
+    fwrite(comout, 1, comlen, stdout);
+    double result = 125;
+    if (exit_code == 0) {
+        result = strtold(comout, NULL);
+    }
+
+    FLOW_free(c, comout);
+
+    return result;
+}
+
+static bool diff_images(flow_c * c, char * checksum_a, char * checksum_b, double * out_dssim, bool generate_visual_diff)
 {
     char filename_a[2048];
     if (!create_relative_path(c, false, filename_a, 2048, "/visuals/%s.png", checksum_a)) {
@@ -234,22 +275,27 @@ static bool generate_image_diff(flow_c * c, char * checksum_a, char * checksum_b
         return false;
     }
 
-    fprintf(stderr, "%s\n", &filename_c[0]);
-
     char magick_command[4096];
     flow_snprintf(magick_command, 4096, "dssim %s %s", filename_a, filename_b);
-    int32_t ignore = system(magick_command);
+    *out_dssim = get_dssim_from_command(c, magick_command);
+    if (*out_dssim > 1 || *out_dssim < 0) {
+        FLOW_error(c, flow_status_IO_error);
+        return false;
+    };
+    if (generate_visual_diff) {
+        fprintf(stderr, "%s\n", &filename_c[0]);
 
-    if (access(filename_c, F_OK) != -1) {
-        return true; // Already exists!
+        if (access(filename_c, F_OK) != -1) {
+            return true; // Already exists!
+        }
+        flow_snprintf(magick_command, 4096, "composite %s %s -compose difference %s", filename_a, filename_b,
+                      filename_c);
+
+        int result = system(magick_command);
+        if (result != 0) {
+            fprintf(stderr, "unhappy imagemagick\n");
+        }
     }
-
-    flow_snprintf(magick_command, 4096, "compare -verbose -metric PSNR %s %s %s", filename_a, filename_b, filename_c);
-    ignore = system(magick_command);
-    flow_snprintf(magick_command, 4096, "composite %s %s -compose difference %s", filename_a, filename_b, filename_c);
-
-    ignore = system(magick_command);
-    ignore++;
     return true;
 }
 
@@ -336,8 +382,9 @@ bool visual_compare(flow_c * c, struct flow_bitmap_bgra * bitmap, const char * n
             FLOW_error_return(c);
         }
 
+        double dssim;
         // Diff the two, generate a third PNG. Also get PSNR metrics from imagemagick
-        if (!generate_image_diff(c, checksum, stored_checksum)) {
+        if (!diff_images(c, checksum, stored_checksum, &dssim, true)) {
             FLOW_error_return(c);
         }
 
@@ -351,7 +398,8 @@ bool visual_compare(flow_c * c, struct flow_bitmap_bgra * bitmap, const char * n
 }
 
 bool visual_compare_two(flow_c * c, struct flow_bitmap_bgra * a, struct flow_bitmap_bgra * b,
-                        const char * comparison_title, const char * file_, const char * func_, int line_number)
+                        const char * comparison_title, double * out_dssim, bool save_bitmaps, bool generate_visual_diff,
+                        const char * file_, const char * func_, int line_number)
 {
 
     char checksum_a[34];
@@ -369,23 +417,30 @@ bool visual_compare_two(flow_c * c, struct flow_bitmap_bgra * a, struct flow_bit
 
     // Compare
     if (strcmp(checksum_a, checksum_b) == 0) {
-        return true; // It matches!
+        if (memcmp(a->pixels, b->pixels, a->stride * a->h) == 0) {
+            *out_dssim = 0;
+            return true; // It matches!
+        } else {
+            // Checksum collsion
+            exit(901);
+        }
     }
-    // They differ
-    if (!save_bitmap_to_visuals(c, a, checksum_a)) {
-        FLOW_error_return(c);
-    }
-    if (!save_bitmap_to_visuals(c, b, checksum_b)) {
-        FLOW_error_return(c);
-    }
-    // Diff the two, generate a third PNG. Also get PSNR metrics from imagemagick
-    if (!generate_image_diff(c, checksum_a, checksum_b)) {
-        FLOW_error_return(c);
-    }
-
-    // Dump to HTML=
-    if (!append_html(c, comparison_title, checksum_a, checksum_b)) {
-        FLOW_error_return(c);
+    if (save_bitmaps) {
+        // They differ
+        if (!save_bitmap_to_visuals(c, a, checksum_a)) {
+            FLOW_error_return(c);
+        }
+        if (!save_bitmap_to_visuals(c, b, checksum_b)) {
+            FLOW_error_return(c);
+        }
+        // Diff the two, generate a third PNG. Also get PSNR metrics from imagemagick
+        if (!diff_images(c, checksum_a, checksum_b, out_dssim, generate_visual_diff && save_bitmaps)) {
+            FLOW_error_return(c);
+        }
+        // Dump to HTML=
+        if (!append_html(c, comparison_title, checksum_a, checksum_b)) {
+            FLOW_error_return(c);
+        }
     }
 
     return false;
