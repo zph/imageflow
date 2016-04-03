@@ -214,6 +214,71 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int idct_downsc
     return true;
 }
 
+
+TEST_CASE("Test faster block downscale method", "")
+{
+    flow_c * c = flow_context_create();
+    size_t bytes_count = 0;
+    uint8_t * bytes = get_bytes_cached(c, &bytes_count, "http://www.rollthepotato.net/~john/kevill/test_800x600.jpg");
+    REQUIRE(djb2_buffer(bytes, bytes_count) == 0x8ff8ec7a8539a2d5); // Test the checksum. I/O can be flaky
+
+    struct flow_job * job = flow_job_create(c);
+    ERR(c);
+    int32_t input_placeholder = 0;
+    struct flow_io * input = flow_io_create_from_memory(c, flow_io_mode_read_seekable, bytes, bytes_count, job, NULL);
+    flow_job_add_io(c, job, input, input_placeholder, FLOW_INPUT);
+
+    struct flow_graph * g = flow_graph_create(c, 10, 10, 200, 2.0);
+    ERR(c);
+    struct flow_bitmap_bgra * b;
+    int32_t last;
+
+    last = flow_node_create_decoder(c, &g, -1, input_placeholder);
+
+    if (!flow_job_decoder_set_downscale_hints_by_placeholder_id(
+        c, job, input_placeholder, 400, 300, 400, 300)) {
+        ERR(c);
+    }
+
+    //Make codec start loading
+    struct flow_decoder_info info;
+    if (!flow_job_get_decoder_info(c, job, input_placeholder, &info)) {
+        ERR(c);
+    }
+
+
+
+    //select IDCT downscaling fn
+
+    struct flow_codec_instance * codec = flow_job_get_codec_instance(c, job, input_placeholder);
+    if (codec == NULL) {
+       ERR(c);
+    }
+    struct flow_job_jpeg_decoder_state * state =  (struct flow_job_jpeg_decoder_state *)codec->codec_state;
+    state->idct_downscale_function = 2;
+
+
+    last = flow_node_create_bitmap_bgra_reference(c, &g, last, &b);
+    //SETS GLOBAL VARS so we're covered despite state->idct_downscale_function
+    if (!set_scale_weights(c, flow_interpolation_filter_Robidoux, 0)){
+        ERR(c);
+    }
+    //For the other function
+    jpeg_block_filter = flow_interpolation_filter_Robidoux;
+    jpeg_block_filter_blur = 0;
+
+    ERR(c);
+    if (!flow_job_execute(c, job, &g)) {
+        ERR(c);
+    }
+
+    fprintf(stdout, "Using idct fn %d\n", state->idct_downscale_function);
+
+    bool match = visual_compare(c, b, "ScaleIDCTFastvsSlow", store_checksums, __FILE__, __func__, __LINE__);
+    REQUIRE(match == true);
+    ERR(c);
+    flow_context_destroy(c);
+}
 TEST_CASE("Test blurring", "")
 {
 

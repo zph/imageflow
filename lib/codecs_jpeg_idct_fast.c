@@ -152,7 +152,7 @@ void jpeg_idct_downscale_wrap_islow_fast(j_decompress_ptr cinfo, jpeg_component_
     float scaled_h[DCTSIZE2];
     for (int row = 0; row < DCTSIZE; row++) {
         for (int to = 0; to < scaled; to++) {
-            const float * weights = weights_by_target[scaled] + DCTSIZE * to;
+            const float * weights = weights_by_target[scaled - 1] + DCTSIZE * to;
             float sum = 0;
             for (int from = 0; from < DCTSIZE; from++) {
                 sum += weights[from] * linearized[row * DCTSIZE + from];
@@ -164,7 +164,7 @@ void jpeg_idct_downscale_wrap_islow_fast(j_decompress_ptr cinfo, jpeg_component_
     float scaled_final[DCTSIZE2];
     for (int row = 0; row < scaled; row++) {
         for (int to = 0; to < scaled; to++) {
-            const float * weights = weights_by_target[scaled] + DCTSIZE * to;
+            const float * weights = weights_by_target[scaled - 1] + DCTSIZE * to;
             float sum = 0;
             for (int from = 0; from < DCTSIZE; from++) {
                 sum += weights[from] * scaled_h[row * DCTSIZE + from];
