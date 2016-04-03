@@ -64,13 +64,15 @@ TEST_CASE("Test scale image", "")
     flow_context_destroy(c);
 }
 
+extern "C" {
+
 //extern flow_interpolation_filter jpeg_block_filter;
 //extern float jpeg_sharpen_percent_goal;
 //extern float jpeg_block_filter_blur;
 
 
 extern float * weights_by_target[7];
-
+}
 
 bool get_image_dimensions(flow_c *c, uint8_t * bytes, size_t bytes_count, int32_t * width, int32_t * height){
     struct flow_job * job = flow_job_create(c);
@@ -296,11 +298,11 @@ TEST_CASE("Export LUT",""){
         ERR(c);
     }
 
-    fprintf(stdout, "const float srgb_to_linear[256] = {\n");
-    for (int a = 1; a <= 32; a++) {
+    fprintf(stdout, "const float lut_srgb_to_linear[256] = {\n");
+    for (int a = 0; a < 32; a++) {
         fprintf(stdout,"    ");
-        for (int b = 1; b <= 8; b++){
-            fprintf(stdout, "%.019f, ", flow_context_byte_to_floatspace(c, (uint8_t) (a * b -1)));
+        for (int b = 0; b < 8; b++){
+            fprintf(stdout, "%.019f, ", flow_context_byte_to_floatspace(c, (uint8_t) (a * 8 + b)));
         }
         fprintf(stdout, "\n");
     }
