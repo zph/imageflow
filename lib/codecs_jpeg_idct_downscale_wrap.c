@@ -76,6 +76,9 @@ void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info 
     int scaled = compptr->DCT_scaled_size;
 #endif
 
+    static float last_weights[8];
+
+
     flow_c * c = flow_context_create();
 
     struct flow_interpolation_details * details = flow_interpolation_details_create_from(c, jpeg_block_filter);
@@ -95,6 +98,16 @@ void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info 
         flow_context_destroy(c);
         zero_output(scaled, output_buf, output_col);
         return; //Let's skip this for now - better to see poor DSSIM
+    }
+
+    float * weights = contrib->ContribRow[0].Weights;
+
+    if (memcmp(&last_weights[0], weights, 8 * sizeof(float)) != 0){
+
+        fprintf(stdout, "filter %d, sharpen %.02f: %.010f %.010f %.010f %.010f %.010f %.010f %.010f %.010f\n",
+                jpeg_block_filter, jpeg_sharpen_percent_goal, weights[0], weights[1], weights[2], weights[3], weights[4],
+                weights[5], weights[6], weights[7]);
+        memcpy(&last_weights[0], weights, 8 * sizeof(float));
     }
 
     struct flow_bitmap_float * source_buf = flow_bitmap_float_create(c, DCTSIZE, DCTSIZE, flow_gray8, false);
