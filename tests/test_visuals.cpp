@@ -66,9 +66,9 @@ TEST_CASE("Test scale image", "")
 
 extern "C" {
 
-//extern flow_interpolation_filter jpeg_block_filter;
-//extern float jpeg_sharpen_percent_goal;
-//extern float jpeg_block_filter_blur;
+extern flow_interpolation_filter jpeg_block_filter;
+extern float jpeg_sharpen_percent_goal;
+extern float jpeg_block_filter_blur;
 
 
 extern float * weights_by_target[7];
@@ -116,7 +116,17 @@ bool set_scale_weights(flow_c *c, flow_interpolation_filter filter, float blur){
     return true;
 }
 
-bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_block_size, int block_scale_to_x,
+#include "jpeglib.h"
+struct flow_job_jpeg_decoder_state {
+    struct jpeg_error_mgr error_mgr; // MUST be first
+    jmp_buf error_handler_jmp; // MUST be second
+    flow_c * context; // MUST be third
+    size_t codec_id; // MUST be fourth
+    int idct_downscale_function; //Must be fifth
+
+};
+
+bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int idct_downscale_fn, int target_block_size, int block_scale_to_x,
                 int block_scale_to_y, int scale_to_x, int scale_to_y, flow_interpolation_filter precise_filter, flow_interpolation_filter block_filter, float post_sharpen, float blur, flow_bitmap_bgra ** ref)
 {
     struct flow_job * job = flow_job_create(c);
@@ -149,6 +159,16 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_bloc
             return false;
         }
     }
+    //select IDCT downscaling fn
+
+    struct flow_codec_instance * codec = flow_job_get_codec_instance(c, job, input_placeholder);
+    if (codec == NULL) {
+        FLOW_error(c, flow_status_Invalid_argument);
+        return false;
+    }
+    struct flow_job_jpeg_decoder_state * state =  (struct flow_job_jpeg_decoder_state *)codec->codec_state;
+    state->idct_downscale_function = idct_downscale_fn;
+
     struct flow_decoder_info info;
     if (!flow_job_get_decoder_info(c, job, input_placeholder, &info)) {
         FLOW_add_to_callstack(c);
@@ -163,6 +183,10 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_bloc
         FLOW_add_to_callstack(c);
         return false;
     }
+    //For the other function
+    jpeg_block_filter = block_filter;
+    jpeg_block_filter_blur = blur;
+
     if (flow_context_has_error(c)){
         FLOW_add_to_callstack(c);
         return false;
@@ -408,16 +432,20 @@ struct config_result{
 //f2 blur=0.86 sharp=-1.00, 0.0009756000000000000, 0.0002193200000000000, 0.0009326600000000000, 0.0041058700000000002, 0.0031356299999999999, 0.0001204800000000000, 0.0007791600000000000, 0.0002229800000000000,
 //
 
-//Least bad configuration (1) for 3/8: (worst dssim 0.3843004500, rank 0.641) - f2 blur=0.86 sharp=-3.00
+//
+//Least bad configuration (2) for 3/8: (worst dssim 0.0235432600, rank 0.671) - f2 blur=0.86 sharp=-2.00
 //
 //
 //Configuration            , vgl_6548_0026.jpg, vgl_6434_0018.jpg, vgl_5674_0098.jpg, u6.jpg (from unsplash), u1.jpg (from unsplash), artificial.jpg, kevill/test_800x600.jpg, nightshot_iso_100.jpg,
-//f2 blur=0.86 sharp=0.00, 0.3843583300000000258, 0.1469734299999999882, 0.1494449499999999931, 0.1446388700000000027, 0.1754430299999999998, 0.1158791299999999969, 0.1916396200000000105, 0.1192227299999999990,
-//f2 blur=0.86 sharp=-3.00, 0.3843004500000000156, 0.1469755899999999893, 0.1492840900000000082, 0.1445965600000000129, 0.1752984599999999893, 0.1158782000000000006, 0.1914959400000000034, 0.1192187900000000050,
-//f2 blur=0.86 sharp=-2.00, 0.3843173500000000020, 0.1469786700000000057, 0.1493567199999999984, 0.1446260900000000127, 0.1753974299999999931, 0.1158765400000000001, 0.1915834399999999937, 0.1192239400000000005,
-//f2 blur=0.86 sharp=-1.00, 0.3843559699999999912, 0.1469751599999999936, 0.1494411700000000121, 0.1446373300000000084, 0.1754424599999999945, 0.1158788800000000035, 0.1916325799999999968, 0.1192227899999999952,
+//f2 blur=0.86 sharp=0.00, 0.0166718600000000002, 0.0033206799999999999, 0.0124358200000000002, 0.0115724000000000000, 0.0098416300000000005, 0.0047794100000000004, 0.0235566400000000002, 0.0043571499999999997,
+//f2 blur=0.86 sharp=-3.00, 0.0166349200000000010, 0.0033191800000000001, 0.0124035499999999993, 0.0115649700000000008, 0.0098405100000000002, 0.0047848200000000004, 0.0235159199999999992, 0.0043641699999999997,
+//f2 blur=0.86 sharp=-2.00, 0.0166491500000000014, 0.0033189700000000001, 0.0124166899999999993, 0.0115661800000000006, 0.0098403499999999994, 0.0047812300000000000, 0.0235432599999999999, 0.0043600799999999997,
+//f2 blur=0.86 sharp=-1.00, 0.0166597799999999990, 0.0033202399999999999, 0.0124354099999999992, 0.0115713799999999992, 0.0098407800000000004, 0.0047792099999999999, 0.0235566400000000002, 0.0043571699999999996,
 //
 //
+//
+//
+
 
 TEST_CASE("Test downscale image during decoding", "")
 {
@@ -465,7 +493,7 @@ TEST_CASE("Test downscale image during decoding", "")
 
 
             struct flow_bitmap_bgra * reference_bitmap;
-            if (!scale_down(c, bytes, bytes_count,scale_to,  0, 0, new_w, new_h,
+            if (!scale_down(c, bytes, bytes_count,0, scale_to,  0, 0, new_w, new_h,
                             flow_interpolation_filter_Robidoux,
                             flow_interpolation_filter_Robidoux, 0, 0,
                             &reference_bitmap)) {
@@ -487,7 +515,7 @@ TEST_CASE("Test downscale image during decoding", "")
                         fprintf(stdout, "f%i sharp %.04f blur %0.4f: ", (int)config->filter,
                                 config->sharpen / 100.f, config->blur);
 
-                        if (!scale_down(inner_context, bytes, bytes_count, scale_to, new_w, new_h, new_w, new_h,
+                        if (!scale_down(inner_context, bytes, bytes_count, 1, scale_to, new_w, new_h, new_w, new_h,
                                         flow_interpolation_filter_Robidoux, config->filter,
                                         config->sharpen, config->blur, &experiment_bitmap)) {
                             ERR(c);

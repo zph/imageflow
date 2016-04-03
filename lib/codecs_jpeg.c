@@ -21,7 +21,8 @@ struct flow_job_jpeg_decoder_state {
     struct jpeg_error_mgr error_mgr; // MUST be first
     jmp_buf error_handler_jmp; // MUST be second
     flow_c * context; // MUST be third
-    size_t codec_id; // MUST be fourht
+    size_t codec_id; // MUST be fourth
+    int idct_downscale_function; //Must be fifth
     flow_job_jpeg_decoder_stage stage;
     struct jpeg_decompress_struct * cinfo;
     size_t row_stride;
@@ -251,6 +252,7 @@ static bool flow_job_jpg_decoder_reset(flow_c * c, struct flow_job_jpeg_decoder_
         state->hints.downscaled_min_width = -1;
         state->hints.or_if_taller_than = -1;
         state->hints.downscale_if_wider_than = -1;
+        state->idct_downscale_function = 0;
     } else {
 
         if (state->cinfo != NULL) {
@@ -334,11 +336,17 @@ static void flow_jpeg_idct_method_selector(j_decompress_ptr cinfo, jpeg_componen
     int scaled = compptr->DCT_scaled_size;
 #endif
 
-    if (scaled > 0 && scaled < 8) {
-        *set_idct_method = jpeg_idct_downscale_wrap_islow_fast;
-        *set_idct_category = JDCT_ISLOW;
+    struct flow_job_jpeg_decoder_state * state = (struct flow_job_jpeg_decoder_state *)cinfo->err;
 
-        fprintf(stdout, "IDCT downscaling to %d/8.", scaled);
+    if (scaled > 0 && scaled < 8) {
+        if (state->idct_downscale_function == 2) {
+            *set_idct_method = jpeg_idct_downscale_wrap_islow_fast;
+            *set_idct_category = JDCT_ISLOW;
+        }else if (state->idct_downscale_function == 1){
+            *set_idct_method = jpeg_idct_downscale_wrap_islow;
+            *set_idct_category = JDCT_ISLOW;
+        }
+        fprintf(stdout, "IDCT downscaling fn %d to %d/8.", state->idct_downscale_function, scaled);
     }
 }
 
