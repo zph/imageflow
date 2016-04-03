@@ -435,6 +435,7 @@ TEST_CASE("Test downscale image during decoding", "")
                 for (size_t blur_ix = 0; blur_ix < blurs_count; blur_ix++) {
                     for (size_t sharpen_ix = 0; sharpen_ix < sharpens_count; sharpen_ix++) {
                         struct config_result * config =  &config_results[config_index];
+                        config_index++;
                         config->blur = blurs[blur_ix];
                         config->sharpen = sharpens[sharpen_ix];
                         config->filter = filters[filter_ix];
@@ -488,7 +489,11 @@ TEST_CASE("Test downscale image during decoding", "")
             for (size_t i =0; i < TEST_IMAGE_COUNT; i++){
                 double dssim = config_results[config_ix].dssim[i];
 
-                double dssim_relative = (dssim - best_dssims[i]) / (worst_dssims[i] - best_dssims[i]);
+
+                double dssim_relative = 0.0001;
+                if (worst_dssims[i] > best_dssims[i]){
+                    dssim_relative = (dssim - best_dssims[i]) / (worst_dssims[i] - best_dssims[i]);
+                }
                 if (dssim_relative < min_rel) min_rel = dssim_relative;
                 if (dssim_relative > max_rel) max_rel = dssim_relative;
                 if (dssim < min) min = dssim;
@@ -507,7 +512,20 @@ TEST_CASE("Test downscale image during decoding", "")
         struct config_result least_bad = config_results[least_bad_ix];
         fprintf(stdout, "\n\n\nLeast bad configuration (%d) for %d/8: (worst dssim %.010f, rank %.03f) - f%d blur=%.2f sharp=%.2f \n\n\n", (int)least_bad_ix, scale_to, least_bad_for_target, least_bad_relative, least_bad.filter, least_bad.blur, least_bad.sharpen);
 
-
+        fprintf(stdout, "Configuration            , ");
+        for (size_t i =0; i < TEST_IMAGE_COUNT; i++){
+            fprintf(stdout, "%s, ", test_image_names[i]);
+        }
+        fprintf(stdout, "\n");
+        for (size_t config_ix = 0; config_ix < config_result_count; config_ix++){
+            struct config_result r = config_results[config_ix];
+            fprintf(stdout, "f%d blur=%.2f sharp=%.2f, ", r.filter, r.blur, r.sharpen);
+            for (size_t i =0; i < TEST_IMAGE_COUNT; i++){
+                fprintf(stdout, "%.019f, ", r.dssim[i]);
+            }
+            fprintf(stdout, "\n");
+        }
+        fprintf(stdout, "\n\n\n\n");
         fflush(stdout);
     }
 
