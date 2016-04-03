@@ -154,7 +154,59 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int target_bloc
     return true;
 }
 
+TEST_CASE("Test blurring", "")
+{
 
+    flow_c * c = flow_context_create();
+    size_t bytes_count = 0;
+    uint8_t * bytes = get_bytes_cached(c, &bytes_count,
+                                       "http://s3-us-west-2.amazonaws.com/imageflow-resources/reference_image_originals/vgl_6548_0026.jpg");
+
+    struct flow_job * job = flow_job_create(c);
+
+    int32_t input_placeholder = 0;
+    struct flow_io * input = flow_io_create_from_memory(c, flow_io_mode_read_seekable, bytes, bytes_count, job, NULL);
+    if (input == NULL) {
+        ERR(c);
+    }
+    if (!flow_job_add_io(c, job, input, input_placeholder, FLOW_INPUT)) {
+        ERR(c);
+    }
+
+    struct flow_graph * g = flow_graph_create(c, 10, 10, 200, 2.0);
+    if (g == NULL) {
+        ERR(c);
+    }
+    struct flow_bitmap_bgra * b;
+    struct flow_bitmap_bgra * reference;
+    int32_t last;
+
+    last = flow_node_create_decoder(c, &g, -1, input_placeholder);
+    last = flow_node_create_bitmap_bgra_reference(c, &g, last, &reference);
+    last = flow_node_create_clone(c, &g, last);
+    last = flow_node_create_bitmap_bgra_reference(c, &g, last, &b);
+    if (flow_context_has_error(c)) {
+        ERR(c);
+    }
+    if (!flow_job_execute(c, job, &g)) {
+        ERR(c);
+    }
+
+    if (!flow_bitmap_bgra_sharpen_block_edges(c, b, 1, -30)) {
+        ERR(c);
+    }
+    double dssim;
+    visual_compare_two(c, reference, b,
+                       "Blur", &dssim, true, true,
+                       __FILE__,
+                       __func__, __LINE__);
+
+    fprintf(stdout, " DSSIM=%.010f\n", dssim);
+
+    REQUIRE(dssim > 0);
+
+    flow_context_destroy(c);
+}
 
 TEST_CASE("Test 8->4 downscaling contrib windows",""){
     flow_c * c = flow_context_create();
