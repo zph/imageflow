@@ -222,41 +222,58 @@ TEST_CASE("Test 8->4 downscaling contrib windows",""){
 }
 
 
-TEST_CASE("Test 8->1 downscaling contrib windows",""){
-    return; //skip
+TEST_CASE("Export weights",""){
     flow_c * c = flow_context_create();
 
-    int block_filter = 1;
-    for (block_filter = 1; block_filter <= flow_interpolation_filter_MitchellFast; block_filter++) {
-        struct flow_interpolation_details * details = flow_interpolation_details_create_from(c, (flow_interpolation_filter)block_filter);
-        if (details == NULL){
-            ERR(c);
-        }
-        float blurs[] = {0, 1.0, 0.95, 0.85, 0.7};
+    struct flow_interpolation_details * details = flow_interpolation_details_create_from(c, flow_interpolation_filter_Robidoux);
+    if (details == NULL){
+        ERR(c);
+    }
 
-        for (uint64_t blur = 0; blur < sizeof(blurs) / sizeof(float); blur++) {
 
-            for (float sharpen_percent_goal = 0; sharpen_percent_goal < 101; sharpen_percent_goal += 10) {
-                details->sharpen_percent_goal = jpeg_sharpen_percent_goal;
+    for (int size = 7; size > 0; size--) {
+        fprintf(stdout, "const float jpeg_scale_to_%d_x_%d_weights[%d][8] = {\n", size, size, size);
+        struct flow_interpolation_line_contributions * contrib = flow_interpolation_line_contributions_create(c,
+                                                                                                              size,
+                                                                                                              8,
+                                                                                                              details);
+        for (int i = 0; i < size; i++) {
+            float eight[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
-                if (blurs[blur] > 0) details->blur = blurs[blur];
-
-                struct flow_interpolation_line_contributions * contrib = flow_interpolation_line_contributions_create(c,
-                                                                                                                      1,
-                                                                                                                      8,
-                                                                                                                      details);
-                float * weights = &contrib->ContribRow[0].Weights[0];
-                fprintf(stdout, "filter %d, sharpen %.02f: %.010f %.010f %.010f %.010f %.010f %.010f %.010f %.010f\n",
-                        block_filter, sharpen_percent_goal, weights[0], weights[1], weights[2], weights[3], weights[4],
-                        weights[5], weights[6], weights[7]);
-//            REQUIRE(contrib->ContribRow[0].Weights[0] == Approx(0.45534f));
-//            REQUIRE(contrib->ContribRow[0].Weights[contrib->ContribRow[0].Right - contrib->ContribRow[0].Left - 1] ==
-//                    Approx(0.45534f));
+            for (int input_ix = contrib->ContribRow[i].Left; input_ix <= contrib->ContribRow[i].Right; input_ix++) {
+                eight[input_ix] = contrib->ContribRow[i].Weights[input_ix - contrib->ContribRow[i].Left];
             }
+
+            fprintf(stdout, "    { %.019f, %.019f, %.019f, %.019f, %.019f, %.019f, %.019f, %.019f },\n",
+                    eight[0], eight[1], eight[2], eight[3], eight[4],
+                    eight[5], eight[6], eight[7]);
+
         }
+        fprintf(stdout, "};\n");
     }
     flow_context_destroy(c);
 }
+
+TEST_CASE("Export LUT",""){
+    flow_c * c = flow_context_create();
+
+    struct flow_interpolation_details * details = flow_interpolation_details_create_from(c, flow_interpolation_filter_Robidoux);
+    if (details == NULL){
+        ERR(c);
+    }
+
+    fprintf(stdout, "const float srgb_to_linear[256] = {\n");
+    for (int a = 1; a <= 32; a++) {
+        fprintf(stdout,"    ");
+        for (int b = 1; b <= 8; b++){
+            fprintf(stdout, "%.019f, ", flow_context_byte_to_floatspace(c, (uint8_t) (a * b -1)));
+        }
+        fprintf(stdout, "\n");
+    }
+    fprintf(stdout, "};\n");
+    flow_context_destroy(c);
+}
+
 
 static const char * const test_images[] = {
 
@@ -328,6 +345,13 @@ static const  unsigned long test_image_checksums[] = {
 //    float best_sharpen[7];
 //    float best_blur[7];
 //};
+// Least bad configuration (0) for 3/8: (worst dssim 0.0041063200, rank 0.001) - f2 blur=0.86 sharp=0.00
+
+// Least bad configuration (128) for 4/8: (worst dssim 0.0008814600, rank 0.008) - f2 blur=0.90 sharp=1.00
+// Least bad configuration (10) for 5/8: (worst dssim 0.0021616700, rank 0.003) - f2 blur=0.86 sharp=3.00
+// Least bad configuration (10) for 6/8: (worst dssim 0.0016544200, rank 0.009) - f2 blur=0.86 sharp=3.00
+// Least bad configuration (9) for 7/8: (worst dssim 0.0032112500, rank 0.010) - f2 blur=0.86 sharp=1.00
+
 
 struct config_result{
     float blur;
