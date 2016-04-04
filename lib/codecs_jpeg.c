@@ -314,16 +314,8 @@ static bool set_downscale_hints(flow_c * c, struct flow_job * job, struct flow_c
     return true;
 }
 
-void jpeg_idct_downscale_wrap_islow(j_decompress_ptr cinfo, jpeg_component_info * compptr, JCOEFPTR coef_block,
-                                    JSAMPARRAY output_buf, JDIMENSION output_col);
 void jpeg_idct_downscale_wrap_islow_fast(j_decompress_ptr cinfo, jpeg_component_info * compptr, JCOEFPTR coef_block,
                                          JSAMPARRAY output_buf, JDIMENSION output_col);
-
-extern flow_interpolation_filter jpeg_block_filter;
-
-extern float jpeg_sharpen_percent_goal;
-
-extern float jpeg_block_filter_blur;
 
 static void flow_jpeg_idct_method_selector(j_decompress_ptr cinfo, jpeg_component_info * compptr,
                                            jpeg_idct_method * set_idct_method, int * set_idct_category)
@@ -341,9 +333,6 @@ static void flow_jpeg_idct_method_selector(j_decompress_ptr cinfo, jpeg_componen
     if (scaled > 0 && scaled < 8) {
         if (state->idct_downscale_function == 2) {
             *set_idct_method = jpeg_idct_downscale_wrap_islow_fast;
-            *set_idct_category = JDCT_ISLOW;
-        }else if (state->idct_downscale_function == 1){
-            *set_idct_method = jpeg_idct_downscale_wrap_islow;
             *set_idct_category = JDCT_ISLOW;
         }
         fprintf(stdout, "IDCT downscaling fn %d to %d/8.", state->idct_downscale_function, scaled);

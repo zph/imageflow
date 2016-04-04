@@ -185,9 +185,6 @@ bool scale_down(flow_c * c, uint8_t * bytes, size_t bytes_count, int idct_downsc
         FLOW_add_to_callstack(c);
         return false;
     }
-    //For the other function
-    jpeg_block_filter = block_filter;
-    jpeg_block_filter_blur = blur;
 
     if (flow_context_has_error(c)){
         FLOW_add_to_callstack(c);
@@ -265,9 +262,6 @@ TEST_CASE("Test faster block downscale method", "")
     if (!set_scale_weights(c, flow_interpolation_filter_Robidoux, 0)){
         ERR(c);
     }
-    //For the other function
-    jpeg_block_filter = flow_interpolation_filter_Robidoux;
-    jpeg_block_filter_blur = 0;
 
     ERR(c);
     if (!flow_job_execute(c, job, &g)) {
