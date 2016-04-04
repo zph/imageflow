@@ -1,6 +1,7 @@
 #include "catch.hpp"
 #include "helpers_visual.h"
 #include "jpeglib.h"
+#include "jversion.h"
 //#define FLOW_STORE_CHECKSUMS
 
 #ifdef FLOW_STORE_CHECKSUMS
@@ -566,8 +567,9 @@ struct config_result{
 //f2 blur=0.80 sharp=50.00, 0.0024026700000000000, 0.0016387299999999999, 0.0025417600000000001, 0.0016971300000000000, 0.0017169600000000000, 0.0007030199999999999, 0.0025111100000000000, 0.0008529399999999999,
 
 
-TEST_CASE("Test downscale image during decoding", "")
+TEST_CASE("Exhasutive search for best downscaling kernel", "")
 {
+    return;
     flow_interpolation_filter filters[] = { flow_interpolation_filter_Robidoux};
     float blurs[] = { 1. / 1.1685777620836932};
     float sharpens[] = { 0, -30, -40, -25, -20, -18, -15, -10, 50};

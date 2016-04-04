@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include "libjpeg-turbo_private/jpeglib.h"
-#include "libjpeg-turbo_private/jerror.h"
+#include "jpeglib.h"
+#include "jerror.h"
 #include "imageflow_private.h"
 #include "lcms2.h"
 #include "codecs.h"

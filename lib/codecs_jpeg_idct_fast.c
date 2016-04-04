@@ -4,12 +4,12 @@
 #include "codecs.h"
 
 #define JPEG_INTERNALS
-#include "libjpeg-turbo_private/jpeglib.h"
-#include "libjpeg-turbo_private/jinclude.h"
-#include "libjpeg-turbo_private/jconfigint.h" /* Private declarations for DCT subsystem */
+#include "jpeglib.h"
+#include "jinclude.h"
+#include "jconfigint.h" /* Private declarations for DCT subsystem */
 
 //#include "libjpeg-turbo_private/jmorecfg.h" /* Private declarations for DCT subsystem */
-#include "libjpeg-turbo_private/jdct.h" /* Private declarations for DCT subsystem */
+#include "jdct.h" /* Private declarations for DCT subsystem */
 
 #include "fastapprox.h"
 
