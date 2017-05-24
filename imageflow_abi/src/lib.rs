@@ -662,6 +662,10 @@ unsafe fn imageflow_send_json(context: *mut Context,
                               json_buffer: *const libc::uint8_t,
                               json_buffer_size: libc::size_t)
                               -> *const JsonResponse {
+
+    if (json_buffer_size << 1) >> 1 != json_buffer_size{
+        //fail if MSB is set
+    }
     //TODO: check for nulls in json_BUFFER AND METHOD
 
     // It doesn't appear that this allocates anything

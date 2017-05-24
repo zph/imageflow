@@ -1,3 +1,5 @@
+#![feature(slice_concat_ext)]
+
 #[macro_use]
 extern crate quick_error;
 extern crate chrono;
@@ -9,6 +11,7 @@ use std::io::{Write, Read, BufWriter};
 use std::path::{Path};
 use std::process::{Command, Output};
 use std::collections::HashMap;
+use std::slice::SliceConcatExt;
 
 quick_error! {
     #[derive(Debug)]
@@ -77,9 +80,16 @@ fn fetch_env(key: &str, result_required: bool, empty_is_missing: bool) -> Option
 fn command(key: &str, cmd: &str, result_required: bool, fallback_to_env: bool) -> Option<String>{
 
     //Panic only if non-UTF-8 output is sent
-    let output = run(cmd);
+    let output = match key {
+        "WIN_SYSTEMINFO" => {
+            run(cmd).map(|s| s.lines().take(18).collect::<Vec<_>>().join("\n") )
+        }
+        _ => run(cmd)
+    };
+
     //Don't panic when fetching env var
-    let env_val = match fallback_to_env { true => fetch_env(key, false, true), false => None};
+
+     let env_val = match fallback_to_env { true => fetch_env(key, false, true), false => None};
 
     //Ensure consistency if both are present
     if let Ok(ref out_str) = output {

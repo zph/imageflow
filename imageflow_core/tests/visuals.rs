@@ -141,6 +141,19 @@ fn test_fill_rect(){
 }
 
 #[test]
+fn test_fill_rect_bgr(){
+    let matched = compare(None, 500,
+                          "FillRectEECCFF_opaque".to_owned(), false, false, vec![
+            s::Node::CreateCanvas {w: 200, h: 200, format: s::PixelFormat::Bgr24, color: s::Color::Srgb(s::ColorSrgb::Hex("FFFFFF".to_owned()))},
+            s::Node::FillRect{x1:0, y1:0, x2:100, y2:100, color: s::Color::Srgb(s::ColorSrgb::Hex("EECCFFFF".to_owned()))},
+            s::Node::Resample2D{ w: 400, h: 400, down_filter: Some(s::Filter::Hermite), up_filter: Some(s::Filter::Hermite), hints: None }
+        ]
+    );
+    assert!(matched);
+}
+
+
+#[test]
 fn test_expand_rect(){
     let matched = compare(None, 500,
                           "FillRectEECCFFExpand2233AAFF".to_owned(), false, false, vec![
@@ -371,7 +384,7 @@ fn test_detect_whitespace(){
                           "DetectWhitespace".to_owned(), true, false, vec![
             s::Node::CreateCanvas {w: 400, h: 300, format: s::PixelFormat::Bgra32, color: s::Color::Transparent},
             s::Node::FillRect{x1:0, y1:0, x2:50, y2:100, color: blue},
-            s::Node::CropWhitespace {threshold: 80, percent_padding: 0f32}
+            s::Node::CropWhitespace {threshold: 20, percent_padding: 0f32}
         ]
     );
     assert!(matched);

@@ -87,7 +87,8 @@ fn scale_def() -> NodeDefinition {
                         let canvas_params = s::Node::CreateCanvas {
                             w: w as usize,
                             h: h as usize,
-                            format: s::PixelFormat::from(input.fmt),
+                            format: s::PixelFormat::Bgra32, //24-bit canvases not supported yet
+                            //format: s::PixelFormat::from(input.fmt),
                             color: s::Color::Transparent,
                         };
                         // TODO: Not the right params!

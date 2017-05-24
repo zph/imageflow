@@ -175,7 +175,12 @@ bool fill_buffer(flow_c * context, struct flow_SearchInfo * __restrict info)
         uint32_t buf_ix = 0;
         for (uint32_t y = 0; y < h; y++) {
             for (uint32_t x = 0; x < w; x++) {
-                info->buf[buf_ix] = (233 * bgra[0] + 1197 * bgra[1] + 610 * bgra[2]) / 2048;
+                uint16_t gray
+                    = (uint16_t)(((233 * bgra[0] + 1197 * bgra[1] + 610 * bgra[2]) * 255 + 524288 - 1) / 524288);
+                info->buf[buf_ix] = gray > 255 ? 255 : gray;
+
+
+                //info->buf[buf_ix] = (233 * bgra[0] + 1197 * bgra[1] + 610 * bgra[2]) / 2048;
                 bgra += channels;
                 buf_ix++;
             }
@@ -213,6 +218,7 @@ bool sobel_scharr_detect(flow_c * context, struct flow_SearchInfo * info)
     const uint32_t y_end = h - 1;
     const uint32_t x_end = w - 1;
     const uint32_t threshold = info->threshold;
+    const uint32_t scharr_threshold = info->threshold * 4;
 
     uint8_t * __restrict buf = info->buf;
     uint32_t buf_ix = w + 1;
@@ -236,7 +242,7 @@ bool sobel_scharr_detect(flow_c * context, struct flow_SearchInfo * info)
 
             const uint32_t scharr_value = (uint32_t)abs(gx) + (uint32_t)abs(gy);
 
-            if (scharr_value > threshold) {
+            if (scharr_value > scharr_threshold) {
                 // Now use differences to find the exact pixel
                 int thresh = threshold; // Maybe it should be smaller?
                 const uint8_t matrix[] = { a11, a12, a13, a21, a22, a23, a31, a32, a33 };

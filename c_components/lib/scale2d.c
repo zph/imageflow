@@ -24,8 +24,8 @@ FLOW_HINT_HOT FLOW_HINT_UNSAFE_MATH_OPTIMIZATIONS
         return false;
     }
 
-    if (input->fmt != flow_bgra32 || canvas->fmt != flow_bgra32) {
-        FLOW_error(c, flow_status_Not_implemented);
+    if ((input->fmt != flow_bgr24 && input->fmt != flow_bgra32) || canvas->fmt != flow_bgra32) {
+        FLOW_error_msg(c, flow_status_Not_implemented, "Input can be bgr or bgra32, canvas must be bgra32: input: %s, canvas: %s", input->fmt, canvas->fmt);
         return false;
     }
     // Use details as a parent struture to ensure everything gets freed
@@ -166,7 +166,7 @@ FLOW_HINT_HOT FLOW_HINT_UNSAFE_MATH_OPTIMIZATIONS
         }
         flow_prof_stop(c, "ScaleBgraFloatRows", true, false);
 
-        if (dest_buf->alpha_premultiplied) {
+        if (dest_buf->alpha_premultiplied && dest_buf->channels == 4) {
             if (!flow_bitmap_float_demultiply_alpha(c, dest_buf, 0, 1)) {
                 FLOW_destroy(c, details);
                 FLOW_error_return(c);
