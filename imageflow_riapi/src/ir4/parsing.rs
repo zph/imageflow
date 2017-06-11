@@ -107,6 +107,20 @@ pub enum ProcessWhen {
 }
 
 
+macro_attr! {
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq,
+IterVariants!(ProcessWhenVariants), IterVariantNames!(ProcessWhenNames))]
+/// What color space to scale, sharpen, and compose images
+pub enum ColorSpace {
+    Srgb,
+    Linear
+}
+
+
+}
+
+
 
 pub static IR4_KEYS: [&'static str;58] = ["mode", "anchor", "flip", "sflip", "scale", "cache", "process",
     "quality", "zoom", "crop", "cropxunits", "cropyunits",
@@ -200,6 +214,10 @@ impl Instructions{
         add(&mut m, "mode", self.mode.map(|v| format!("{:?}", v).to_lowercase()));
         add(&mut m, "scale", self.scale.map(|v| format!("{:?}", v).to_lowercase()));
         add(&mut m, "format", self.format.map(|v| format!("{:?}", v).to_lowercase()));
+        add(&mut m, "colorspace", self.working_colorspace.map(|v| format!("{:?}", v).to_lowercase()));
+
+        //linear_downscaling
+        //
         add(&mut m, "srotate", self.srotate);
         add(&mut m, "rotate", self.rotate);
         add(&mut m, "autorotate", self.autorotate);
@@ -239,6 +257,7 @@ impl Instructions{
 
         i.scale = p.parse_scale("scale").map(|v| v.clean());
 
+        i.working_colorspace = p.parse_colorspace("colorspace");
 
         i.format = p.parse_format("format").or(p.parse_format("thumbnail")).map(|v| v.clean());
         i.srotate = p.parse_rotate("srotate");
@@ -426,7 +445,20 @@ impl<'a> Parser<'a>{
         )
     }
 
-    fn parse_fit_mode(&mut self, key: &'static str) -> Option<FitModeStrings>{
+
+
+fn parse_colorspace(&mut self, key: &'static str) -> Option<FitModeStrings>{
+    self.parse(key, |value| {
+        for (k, v) in FitModeStrings::iter_variant_names().zip(FitModeStrings::iter_variants()) {
+            if k.eq_ignore_ascii_case(value) {
+                return Ok(v)
+            }
+        }
+        Err(())
+    })
+}
+
+fn parse_fit_mode(&mut self, key: &'static str) -> Option<FitModeStrings>{
         self.parse(key, |value| {
             for (k, v) in FitModeStrings::iter_variant_names().zip(FitModeStrings::iter_variants()) {
                 if k.eq_ignore_ascii_case(value) {
@@ -590,7 +622,8 @@ pub struct Instructions{
     pub jpeg_subsampling: Option<i32>,
     pub anchor: Option<(Anchor1D, Anchor1D)>,
     pub trim_whitespace_threshold: Option<i32>,
-    pub trim_whitespace_padding_percent: Option<f64>
+    pub trim_whitespace_padding_percent: Option<f64>,
+    pub working_colorspace: Option<ColorSpace>,
 
 }
 #[derive(Debug,Copy, Clone,PartialEq)]
@@ -714,6 +747,9 @@ fn test_url_parsing() {
 
     t("crop=0,0,40,50", Instructions { crop: Some([0f64,0f64,40f64,50f64]), ..Default::default() }, vec![]);
     t("crop= 0, 0,40 ,  50", Instructions { crop: Some([0f64,0f64,40f64,50f64]), ..Default::default() }, vec![]);
+
+    t("colorspace=linear", Instructions { working_colorspace: Some(s::ColorSpace::LinearRgb), ..Default::default() }, vec![]);
+    t("colorspace=srgb", Instructions { working_colorspace: Some(s::ColorSpace::Srgb), ..Default::default() }, vec![]);
 
 
     expect_warning("crop","(0,3,80, 90)",  Instructions { crop: Some([0f64,3f64,80f64,90f64]), ..Default::default() });

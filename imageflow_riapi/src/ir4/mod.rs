@@ -39,6 +39,7 @@ impl Ir4Command{
 /// Minimal translation into framewise (delay as much as possible)
 pub struct Ir4Translate{
     pub i: Ir4Command,
+    pub image_info: s::ImageInfo,
     pub decode_id: Option<i32>,
     pub encode_id: Option<i32>,
 }
@@ -57,7 +58,17 @@ impl Ir4Translate{
 
     pub fn get_decode_node(&self) -> Option<s::Node>{
         if let Some(id) = self.decode_id {
-            Some(s::Node::Decode { io_id: id, commands: None })
+            let frame_info: s::ImageInfo = ctx.job.get_image_info(io_id).unwrap();
+
+            let commands = Some(vec![s::DecoderCommand::JpegDownscaleHints(s::JpegIDCTDownscaleHints {
+                width: pre_w as i64,
+                height: pre_h as i64,
+                scale_luma_spatially: Some(commands.luma_correct),
+                gamma_correct_for_srgb_during_spatial_luma_scaling:
+                Some(commands.luma_correct),
+            })]);
+
+            Some(s::Node::Decode { io_id: id, commands: commands })
         }else{
             None
         }
@@ -66,7 +77,10 @@ impl Ir4Translate{
     pub fn translate(&self) -> sizing::Result<Ir4Result> {
         let mut r = self.i.parse()?;
         let mut b = ::ir4::layout::FramewiseBuilder::new();
-        //Expand decoder early if trimming
+        //Expand decoder early if trimming or if optimizing decoding
+
+        let decode_early = r.parsed.trim_whitespace_threshold.is_some() || true;
+
         let delayed_id = if r.parsed.trim_whitespace_threshold.is_some() {
             if let Some(n) = self.get_decode_node() {
                 b.add(n);

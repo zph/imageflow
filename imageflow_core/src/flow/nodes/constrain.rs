@@ -220,6 +220,7 @@ fn command_string_def() -> NodeDefinition {
                                 }
                                 let decode_node = ::imageflow_riapi::ir4::Ir4Translate{
                                     i: ::imageflow_riapi::ir4::Ir4Command::QueryString(value.to_owned()),
+                                    image_info: ctx.job.get_image_info(d_id),
                                     decode_id: Some(d_id),
                                     encode_id: None,
                                 }.get_decode_node().unwrap();
