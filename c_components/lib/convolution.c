@@ -501,24 +501,66 @@ static void flow_bitmap_bgra32_sharpen_block_edges_x(struct flow_bitmap_bgra * i
         }
     }
 }
+
+FLOW_HINT_HOT
+static inline void transpose4x4_SSE(float *A, float *B, const int lda, const int ldb) {
+    __m128 row1 = _mm_load_ps(&A[0*lda]);
+    __m128 row2 = _mm_load_ps(&A[1*lda]);
+    __m128 row3 = _mm_load_ps(&A[2*lda]);
+    __m128 row4 = _mm_load_ps(&A[3*lda]);
+    _MM_TRANSPOSE4_PS(row1, row2, row3, row4);
+    _mm_store_ps(&B[0*ldb], row1);
+    _mm_store_ps(&B[1*ldb], row2);
+    _mm_store_ps(&B[2*ldb], row3);
+    _mm_store_ps(&B[3*ldb], row4);
+}
+
+FLOW_HINT_HOT
+static inline void transpose_block_SSE4x4(float *A, float *B, const int n, const int m, const int lda, const int ldb ,const int block_size) {
+//#pragma omp parallel for
+    for(int i=0; i<n; i+=block_size) {
+        for(int j=0; j<m; j+=block_size) {
+            int max_i2 = i+block_size < n ? i + block_size : n;
+            int max_j2 = j+block_size < m ? j + block_size : m;
+            for(int i2=i; i2<max_i2; i2+=4) {
+                for(int j2=j; j2<max_j2; j2+=4) {
+                    transpose4x4_SSE(&A[i2*lda +j2], &B[j2*ldb + i2], lda, ldb);
+                }
+            }
+        }
+    }
+}
+
 FLOW_HINT_HOT FLOW_HINT_UNSAFE_MATH_OPTIMIZATIONS
 
-    bool
-    flow_bitmap_bgra_transpose(flow_c * c, struct flow_bitmap_bgra * from, struct flow_bitmap_bgra * to)
+bool
+flow_bitmap_bgra_transpose(flow_c * c, struct flow_bitmap_bgra * from, struct flow_bitmap_bgra * to)
 {
     if (from->w != to->h || from->h != to->w || from->fmt != to->fmt || from->fmt != flow_bgra32) {
         FLOW_error(c, flow_status_Invalid_argument);
         return false;
     }
-    int step = flow_pixel_format_bytes_per_pixel(to->fmt);
-    for (uint32_t x = 0; x < to->w; x++) {
-        for (uint32_t y = 0; y < to->h; y++) {
-            *((uint32_t *)&to->pixels[x * step + y * to->stride])
-                = *((uint32_t *)&from->pixels[x * from->stride + y * step]);
-        }
+
+    if (from->stride % 16 != 0 || to->stride % 16 != 0) {
+        FLOW_error(c, flow_status_Invalid_argument);
+        return false;
     }
+
+    int block_size = 128;
+
+    transpose_block_SSE4x4((float *)from->pixels, (float *)to->pixels, from->h - from->h % 4,from->w - from->w % 4, from->stride / 4, to->stride / 4, block_size);
+
+
+//    int step = flow_pixel_format_bytes_per_pixel(to->fmt);
+//    for (uint32_t x = 0; x < to->w; x++) {
+//        for (uint32_t y = 0; y < to->h; y++) {
+//            *((uint32_t *)&to->pixels[x * step + y * to->stride])
+//                = *((uint32_t *)&from->pixels[x * from->stride + y * step]);
+//        }
+//    }
     return true;
 }
+
 FLOW_HINT_HOT FLOW_HINT_UNSAFE_MATH_OPTIMIZATIONS
 
     bool
