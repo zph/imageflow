@@ -33,6 +33,16 @@ static inline double ir_guassian(double x, double stdDev)
     return (exp((-x * x) / (2 * stdDev * stdDev)) / (sqrt(2 * IR_PI) * stdDev));
 }
 
+#if defined(__GNUC__)
+#define FLOW_HINT_HOT __attribute__((hot))
+#define FLOW_HINT_PURE __attribute__((pure))
+#else
+#define FLOW_HINT_HOT
+#define FLOW_HINT_PURE
+#endif
+
+FLOW_HINT_HOT
+FLOW_HINT_PURE
 static inline uint8_t uchar_clamp_ff(float clr)
 {
     uint16_t result;

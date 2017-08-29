@@ -12,6 +12,7 @@
 
 #include "imageflow_private.h"
 #include <emmintrin.h>
+#include <immintrin.h>
 
 bool flow_bitmap_float_scale_rows(flow_c * context, struct flow_bitmap_float * from, uint32_t from_row,
                                   struct flow_bitmap_float * to, uint32_t to_row, uint32_t row_count,
@@ -65,7 +66,8 @@ bool flow_bitmap_float_scale_rows(flow_c * context, struct flow_bitmap_float * f
             __m128 * __restrict dest_buffer = (__m128 *)(to->pixels + ((to_row + row) * to->float_stride));
 
             for (ndx = 0; ndx < dest_buffer_count; ndx++) {
-                __m128 sums = { 0.0f };
+                __m256 sums = { 0.0f };
+                const __m256i mask = _mm256_setr_epi32(0,0,0,0,1,1,1,1);
                 const int left = weights[ndx].Left;
                 const int right = weights[ndx].Right;
 
@@ -73,19 +75,21 @@ bool flow_bitmap_float_scale_rows(flow_c * context, struct flow_bitmap_float * f
                 int i;
 
                 /* Accumulate each channel */
-                for (i = left; i <= right; i++) {
+                for (i = left; i <= right; i+=2) {
 // TODO: Do a better job with this.
 #ifdef __clang__
                     __m128 factor = _mm_set1_ps(weightArray[i - left]);
                     sums += factor * source_buffer[i];
 #else
-                    __m128 factor = _mm_set1_ps(weightArray[i - left]);
-                    __m128 mid = _mm_mul_ps(factor, source_buffer[i]);
-                    sums = _mm_add_ps(sums, mid);
+
+
+                    __m256 factors =_mm256_i32gather_ps (&weightArray[i - left], mask,1);
+                    sums = _mm256_fmadd_ps(*(const __m256 *)&source_buffer[i], factors, sums);
 #endif
                 }
 
-                dest_buffer[ndx] = sums;
+
+                dest_buffer[ndx] = _mm_setr_ps(sums[0]+sums[4],sums[1]+sums[5],sums[2]+sums[6],sums[3]+sums[7]);
             }
 #endif
         }

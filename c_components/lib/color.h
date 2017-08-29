@@ -116,6 +116,21 @@ static inline uint8_t flow_colorcontext_floatspace_to_srgb(struct flow_colorcont
         return uchar_clamp_ff(linear_to_srgb(v));
     return uchar_clamp_ff(255.0f * v);
 }
+
+FLOW_HINT_PURE
+FLOW_HINT_HOT
+static inline uint8_t flow_colorcontext_srgb_to_srgb(struct flow_colorcontext_info * color, float space_value)
+{
+    return uchar_clamp_ff(255.0f * space_value);
+}
+FLOW_HINT_PURE
+FLOW_HINT_HOT
+static inline uint8_t flow_colorcontext_linear_to_srgb(struct flow_colorcontext_info * color, float space_value)
+{
+
+    return uchar_clamp_ff(linear_to_srgb(space_value));
+}
+
 FLOW_HINT_PURE
 
 static inline void linear_to_yxz(float bgr[])

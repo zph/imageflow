@@ -1,5 +1,6 @@
 #include "imageflow_private.h"
 
+FLOW_HINT_HOT FLOW_HINT_UNSAFE_MATH_OPTIMIZATIONS
 static void multiply_row(float * row, const size_t length, const float coefficient)
 {
     for (size_t i = 0; i < length; i++) {

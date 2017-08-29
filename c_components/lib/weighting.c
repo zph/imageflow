@@ -372,7 +372,7 @@ flow_interpolation_line_contributions_create(flow_c * context, const uint32_t ou
     const double downscale_factor = fmin(1.0, scale_factor);
     const double half_source_window = (details->window + 0.5) / downscale_factor;
 
-    const uint32_t allocated_window_size = (int)ceil(2 * (half_source_window - TONY)) + 1;
+    const uint32_t allocated_window_size = (int)ceil(2 * (half_source_window - TONY)) + 2;
     uint32_t u, ix;
     struct flow_interpolation_line_contributions * res
         = LineContributions_alloc(context, output_line_size, allocated_window_size);

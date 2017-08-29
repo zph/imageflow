@@ -62,8 +62,7 @@ bool flow_bitmap_float_convert_srgb_to_linear(flow_c * context, struct flow_colo
         FLOW_error_msg(context, flow_status_Unsupported_pixel_format, "copy_step=%d, from_step=%d, to_step=%d", copy_step, from_step, to_step);
         return false;
     }
-    if
-        likely(copy_step == 4)
+    if (copy_step == 4)
         {
             for (uint32_t row = 0; row < row_count; row++) {
                 uint8_t * src_start = src->pixels + (from_row + row) * src->stride;
@@ -82,13 +81,14 @@ bool flow_bitmap_float_convert_srgb_to_linear(flow_c * context, struct flow_colo
     else {
 
 #define CONVERT_LINEAR(from_step, to_step) \
+        float * lookup = &colorcontext->byte_to_float[0]; \
         for (uint32_t row = 0; row < row_count; row++) { \
             uint8_t * src_start = src->pixels + (from_row + row) * src->stride; \
             float * buf = dest->pixels + (dest->float_stride * (row + dest_row)); \
             for (uint32_t to_x = 0, bix = 0; bix < units; to_x += to_step, bix += from_step) { \
-                buf[to_x] = flow_colorcontext_srgb_to_floatspace(colorcontext, src_start[bix]); \
-                buf[to_x + 1] = flow_colorcontext_srgb_to_floatspace(colorcontext, src_start[bix + 1]); \
-                buf[to_x + 2] = flow_colorcontext_srgb_to_floatspace(colorcontext, src_start[bix + 2]);  \
+                buf[to_x] = lookup[src_start[bix]]; \
+                buf[to_x + 1] = lookup[src_start[bix + 1]]; \
+                buf[to_x + 2] = lookup[src_start[bix + 2]];  \
             }  \
         }
 
@@ -326,6 +326,7 @@ bool flow_bitmap_float_demultiply_alpha(flow_c * context, struct flow_bitmap_flo
     return true;
 }
 
+FLOW_HINT_HOT
 bool flow_bitmap_float_copy_linear_over_srgb(flow_c * context, struct flow_colorcontext_info * colorcontext,
                                              struct flow_bitmap_float * src, const uint32_t from_row,
                                              struct flow_bitmap_bgra * dest, const uint32_t dest_row,
@@ -333,6 +334,10 @@ bool flow_bitmap_float_copy_linear_over_srgb(flow_c * context, struct flow_color
                                              const uint32_t col_count, const bool transpose)
 {
 
+    if (colorcontext->apply_gamma){
+        FLOW_error(context, flow_status_Not_implemented);
+        return false;
+    }
     const uint32_t dest_bytes_pp = flow_pixel_format_bytes_per_pixel(dest->fmt);
 
     const uint32_t srcitems = umin(from_col + col_count, src->w) * src->channels;
@@ -345,14 +350,14 @@ bool flow_bitmap_float_copy_linear_over_srgb(flow_c * context, struct flow_color
     const uint32_t dest_row_stride = transpose ? dest_bytes_pp : dest->stride;
     const uint32_t dest_pixel_stride = transpose ? dest->stride : dest_bytes_pp;
 
-#define FLOAT_COPY_LINEAR(ch, dest_pixel_stride, copy_alpha, clean_alpha)                                                                 \
+#define FLOAT_COPY_LINEAR(ch, dest_pixel_stride, copy_alpha, clean_alpha, floatspace_to_byte)                                                                 \
     for (uint32_t row = 0; row < row_count; row++) {                                                                   \
         float * src_row = src->pixels + (row + from_row) * src->float_stride;                                          \
         uint8_t * dest_row_bytes = dest->pixels + (dest_row + row) * dest_row_stride + (from_col * dest_pixel_stride); \
         for (uint32_t ix = from_col * ch; ix < srcitems; ix += ch) {                                                   \
-            dest_row_bytes[0] = flow_colorcontext_floatspace_to_srgb(colorcontext, src_row[ix]);                       \
-            dest_row_bytes[1] = flow_colorcontext_floatspace_to_srgb(colorcontext, src_row[ix + 1]);                   \
-            dest_row_bytes[2] = flow_colorcontext_floatspace_to_srgb(colorcontext, src_row[ix + 2]);                   \
+            dest_row_bytes[0] = floatspace_to_byte(colorcontext, src_row[ix]);                       \
+            dest_row_bytes[1] = floatspace_to_byte(colorcontext, src_row[ix + 1]);                   \
+            dest_row_bytes[2] = floatspace_to_byte(colorcontext, src_row[ix + 2]);                   \
             if (copy_alpha) {                                                                                          \
                 dest_row_bytes[3] = uchar_clamp_ff(src_row[ix + 3] * 255.0f);                                          \
             }                                                                                                          \
@@ -362,52 +367,103 @@ bool flow_bitmap_float_copy_linear_over_srgb(flow_c * context, struct flow_color
             dest_row_bytes += dest_pixel_stride;                                                                       \
         }                                                                                                              \
     }
-    if (dest_pixel_stride == 4) {
-        if (ch == 3) {
-            if (copy_alpha == true && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(3,4, true, false)
+    if (colorcontext->apply_srgb) {
+        if likely((dest_pixel_stride == 4)) {
+            if likely((ch == 3)) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, 4, true, false, flow_colorcontext_linear_to_srgb)
+                }
+                if likely((copy_alpha == false && clean_alpha == false)) {
+                    FLOAT_COPY_LINEAR(3, 4, false, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(3, 4, false, true, flow_colorcontext_linear_to_srgb)
+                }
             }
-            if (copy_alpha == false && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(3,4, false, false)
+            if (ch == 4) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, 4, true, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, 4, false, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(4, 4, false, true, flow_colorcontext_linear_to_srgb)
+                }
             }
-            if (copy_alpha == false && clean_alpha == true) {
-                FLOAT_COPY_LINEAR(3,4, false, true)
+        } else {
+            if (ch == 3) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, true, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, false, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, false, true, flow_colorcontext_linear_to_srgb)
+                }
+            }
+            if (ch == 4) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, true, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, false, false, flow_colorcontext_linear_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, false, true, flow_colorcontext_linear_to_srgb)
+                }
             }
         }
-        if (ch == 4) {
-            if (copy_alpha == true && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(4,4, true, false)
+    }else{
+        if (dest_pixel_stride == 4) {
+            if (ch == 3) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, 4, true, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, 4, false, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(3, 4, false, true, flow_colorcontext_srgb_to_srgb)
+                }
             }
-            if (copy_alpha == false && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(4,4, false, false)
+            if (ch == 4) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, 4, true, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, 4, false, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(4, 4, false, true, flow_colorcontext_srgb_to_srgb)
+                }
             }
-            if (copy_alpha == false && clean_alpha == true) {
-                FLOAT_COPY_LINEAR(4,4, false, true)
+        } else {
+            if (ch == 3) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, true, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, false, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(3, dest_pixel_stride, false, true, flow_colorcontext_srgb_to_srgb)
+                }
+            }
+            if (ch == 4) {
+                if (copy_alpha == true && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, true, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == false) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, false, false, flow_colorcontext_srgb_to_srgb)
+                }
+                if (copy_alpha == false && clean_alpha == true) {
+                    FLOAT_COPY_LINEAR(4, dest_pixel_stride, false, true, flow_colorcontext_srgb_to_srgb)
+                }
             }
         }
-    } else {
-        if (ch == 3) {
-            if (copy_alpha == true && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(3,dest_pixel_stride, true, false)
-            }
-            if (copy_alpha == false && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(3,dest_pixel_stride, false, false)
-            }
-            if (copy_alpha == false && clean_alpha == true) {
-                FLOAT_COPY_LINEAR(3,dest_pixel_stride, false, true)
-            }
-        }
-        if (ch == 4) {
-            if (copy_alpha == true && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(4,dest_pixel_stride, true, false)
-            }
-            if (copy_alpha == false && clean_alpha == false) {
-                FLOAT_COPY_LINEAR(4,dest_pixel_stride, false, false)
-            }
-            if (copy_alpha == false && clean_alpha == true) {
-                FLOAT_COPY_LINEAR(4,dest_pixel_stride, false, true)
-            }
-        }
+
     }
     return true;
 }
