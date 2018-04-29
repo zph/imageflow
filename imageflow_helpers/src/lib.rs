@@ -1,7 +1,4 @@
-#![feature(global_allocator, allocator_api, heap_api)]
 
-#![feature(integer_atomics)]
-#![feature(ascii_ctype)]
 // `error_chain!` can recurse deeply
 #![recursion_limit = "1024"]
 
@@ -24,8 +21,6 @@
 //    }
 //}
 
-#[global_allocator]
-static GLOBAL: ::std::heap::System = ::std::heap::System;
 
 
 
