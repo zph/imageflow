@@ -158,9 +158,12 @@ name = "c_components_tests"
 version = "0.1.0"
 dependencies = [
  "cc 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glob 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "imageflow_c_components 0.1.0",
  "lcms2-sys 2.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "libpng-sys 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libz-sys 1.0.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mozjpeg-sys 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
